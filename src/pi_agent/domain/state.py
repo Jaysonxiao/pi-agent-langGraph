@@ -24,13 +24,30 @@ class ToolLoopError(TypedDict):
     message: str
 
 
-AgentError: TypeAlias = ModelError | ToolLoopError
+class ContextError(TypedDict):
+    """Preparation failed before the main model was invoked."""
+
+    code: Literal["context_error"]
+    exception_type: str
+    message: str
+
+
+AgentError: TypeAlias = ModelError | ToolLoopError | ContextError
 
 
 class AgentState(TypedDict):
     """Complete shared state for one minimal graph run."""
 
     messages: Annotated[list[AnyMessage], add_messages]
+    status: RunStatus
+    error: AgentError | None
+    tool_rounds: int
+
+
+class AgentTurnInput(TypedDict):
+    """Input for one user turn before reducers merge it into checkpointed state."""
+
+    messages: list[AnyMessage]
     status: RunStatus
     error: AgentError | None
     tool_rounds: int
@@ -45,8 +62,8 @@ class AgentStateUpdate(TypedDict, total=False):
     tool_rounds: int
 
 
-def create_initial_state(content: str, *, message_id: str = "user-1") -> AgentState:
-    """Create validated graph input while preserving the user's original text."""
+def create_initial_state(content: str, *, message_id: str = "user-1") -> AgentTurnInput:
+    """Create one validated turn input while preserving the user's original text."""
     if not content.strip():
         raise ValueError("User message must not be blank.")
     if not message_id:

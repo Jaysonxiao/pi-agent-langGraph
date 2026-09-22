@@ -14,11 +14,26 @@ uv run mypy src tests
 uv run pytest
 ```
 
-M0–M5 have archived deliveries; M6 has not started. The fake CLI runs the minimal model graph and supports text or JSONL output:
+M0–M7 have archived deliveries. The fake run CLI still uses the minimal non-persistent model graph and supports text or JSONL output:
 
 ```powershell
 uv run pi-agent --provider fake --prompt hello --events text
 uv run pi-agent --provider fake --prompt hello --events jsonl
 ```
 
-The CLI does not yet invoke the coding-tool loop. M5's synchronous fake-provider streaming scope is accepted; real provider/tool interruption remains a later runtime concern. See the [M5 archive](docs/acceptance/M5.md), current [PLAN.md](PLAN.md), and [LEARNING_LOG.md](LEARNING_LOG.md).
+M6 adds SQLite-backed session APIs for resume, history, state forks, application metadata, and a metadata listing command:
+
+```powershell
+uv run pi-agent session list --database .\checkpoints.sqlite
+```
+
+M7 prepares ephemeral model context through `RunContext.context_config`: explicit global/workspace rules, templates, approximate token budgets, a synchronous summary-model adapter, protected recent turns and tool facts. Context errors stop the main model while preserving durable history. Inspect the same preparation pipeline without a model call:
+
+```powershell
+uv run pi-agent context inspect --provider fake
+uv run pi-agent context inspect --provider fake --workspace . --active-path src/pi_agent --max-tokens 4096
+```
+
+Inspection reports source paths, message roles, size estimates and compaction statistics without echoing prompt text. Token estimates are heuristics; real-provider capacity and summary quality remain M8/M9 work.
+
+The run CLI does not yet invoke the coding-tool loop or persist its own fake run. Real provider/tool interruption remains a later runtime concern. See the [M5 archive](docs/acceptance/M5.md), [M6 archive](docs/acceptance/M6.md), [M7 archive](docs/acceptance/M7.md), current [PLAN.md](PLAN.md), and [LEARNING_LOG.md](LEARNING_LOG.md).

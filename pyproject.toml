@@ -12,6 +12,7 @@ scripts = { pi-agent = "pi_agent.cli.app:main" }
 dependencies = [
     "langchain-core>=1.2,<2",
     "langgraph>=1.2,<1.3",
+    "langgraph-checkpoint-sqlite>=3.1,<4",
     "pydantic>=2.12,<3",
 ]
 
@@ -34,6 +35,7 @@ testpaths = ["tests"]
 line-length = 100
 src = ["src", "tests"]
 target-version = "py311"
+extend-exclude = [".pytest-tmp", ".pytest-tmp-*"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]

@@ -3,7 +3,7 @@
 ## 1. 当前状态与文档分工
 
 - 初始规划：2026-09-02；M5 初次归档：2026-09-18；M5 遗留项复验、M6 实现与归档：2026-09-21（Asia/Shanghai）。
-- M0–M7 已完成并归档；M7 最终验收/归档：2026-09-22（Asia/Shanghai）。当前无 `in_progress` 里程碑，M8 保持 `pending`。
+- M0–M6 已完成；M7 是当前唯一 `in_progress` 里程碑，M7.1–M7.7 已完成，等待 M7 整体验收与归档。
 - 真实 provider/tool 的异步中断、超时和取消传播仍属于 M8，不能从 M5 的同步消费侧取消推断已经完成。
 
 | 文件 | 唯一职责 |
@@ -25,7 +25,7 @@
 | M4 | 安全 Coding Tools 与人工审批 | completed | MVP | [M4](docs/acceptance/M4.md)，2026-09-16 |
 | M5 | 流式事件与 CLI 闭环 | completed | MVP | [M5](docs/acceptance/M5.md)，2026-09-21 遗留项闭合复验 |
 | M6 | 会话持久化、恢复与分支 | completed | MVP | [M6](docs/acceptance/M6.md)，2026-09-21 归档 |
-| M7 | 上下文装配与长对话压缩 | completed | 增强 | [M7](docs/acceptance/M7.md)，2026-09-22 最终验收与归档 |
+| M7 | 上下文装配与长对话压缩 | in_progress | 增强 | 2026-09-21 启动；M7.1–M7.7 已验收，等待整体验收与归档 |
 | M8 | 模型适配、重试、取消与容错 | pending | 增强 | 尚未启动 |
 | M9 | 扩展、可观测性与评测 | pending | 生产化 | 尚未启动 |
 | M10 | 远程协议与客户端/服务端 | pending | 可选扩展 | 尚未启动 |
@@ -88,7 +88,7 @@ docs/acceptance/ # 每个里程碑的验收记录
 
 ## 5. 里程碑契约
 
-每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M8–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
+每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M7–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
 
 ### M0 — 源码分析与路线设计
 
@@ -166,9 +166,9 @@ M4 交付的是安全工具、文件审批和 prepare→approval→apply 集成�
 - **非目标**：兼容 Pi 的全部 skills/extensions 格式或精确 token 计费。
 - **交付物**：`context/`、上下文快照诊断、压缩与恢复测试。
 - **验收标准**：装配顺序可解释；摘要不删除持久化原记录；压缩失败不破坏会话；工具调用边界保持合法。
-- **验证命令**：`uv run pytest tests/context tests/integration/test_compaction.py -q --basetemp=.pytest-tmp-m7-acceptance`；`uv run pi-agent context inspect --provider fake`。
+- **验证命令**：`uv run pytest tests/context tests/integration/test_compaction.py -q`；`uv run pi-agent context inspect --provider fake`。
 
-归档结果：M7.1–M7.7 与归档修复已完成全局/祖先规则、prompt template、UTF-8 与 token 估算、阈值触发的同步摘要阶段、最近 turn/文件操作事实保留、最终预算门禁和诊断 CLI。摘要阶段在 `model_node` 内通过 `ModelSummarizer` 执行，不新增持久化派生消息；SQLite 测试证明失败后原记录可恢复。真实 provider 与精确计费不属于本轮验收。完整证据与局限见 [M7 归档](docs/acceptance/M7.md)。
+M7.1 已完成：给定受 `WorkspacePathPolicy` 约束的活动文件或目录，只返回从 workspace 根到活动目录祖先链上存在的 `AGENTS.md`，顺序由宽到窄；本切片不读取文件内容、不组装 prompt、不估算 token，也不修改 graph state。M7.2 已完成：读取这些已发现路径，返回带来源和原始 UTF-8 字节数的不可变文档，并为读取失败提供稳定错误码。M7.3 已完成：将规则变成一次性的模型可见 `SystemMessage`，保持持久化消息历史不变。M7.4 已完成：固定 UTF-8 消息预算和保留边界。M7.5 已完成：规划系统前缀、可摘要中段和最近后缀，并保持工具调用对完整。M7.6 已完成：将外部提供的摘要临时注入模型上下文，不生成或持久化摘要。M7.7 已完成：将发现、读取、装配、预算和摘要恢复串到 `model_node` 的模型调用前链路，并验证派生上下文不污染原始 state。证据见 [M7 验收记录](docs/acceptance/M7.md)。
 
 ### M8 — 模型适配、重试、取消与容错
 
@@ -211,15 +211,13 @@ M4 交付的是安全工具、文件审批和 prepare→approval→apply 集成�
 - M3 定义工具循环；M4 定义文件/进程安全能力；M5 定义事件和 CLI 消费。组件分别通过测试不等于 CLI 已连通所有工具。
 - M4 的 InMemorySaver 只支持审批教学测试；M6 才负责持久化会话、跨进程恢复和分支。
 - M5 的 SIGINT/token 是同步消费侧协作取消，并已验证迭代器资源释放；M8 的 provider/tool 异步取消传播仍属于运行时能力。
-- M7 已归档；当前无进行中的里程碑。M8 尚未启动，真实 provider 联调按原计划在 M8 推进。
+- M6 已归档；M7 已由用户明确启动，是当前唯一进行中的里程碑。
 - 每个里程碑坚持“整体请求 → 当前切片 → Pi 设计与 Python 映射 → 一个练习 → 回到整体”。学习者实现有价值的核心代码。
 - 修改范围或验收口径时保留原要求，明确已实现部分和未覆盖部分；不可通过搬移文档隐去缺口。
 - 里程碑编号 M0–M11 固定。M5 内的十一道练习属于子切片，不是十一项新里程碑。
 - PLAN 不再追加每轮测试流水；最新快照更新原段落，详细证据放到对应验收文件。历史“下一步”和预期红灯仅保存在历史快照。
 
 ## 7. 本次复验与记录维护
-
-2026-09-22 M7 归档复验：全仓 pytest `217 passed`；M7 原计划范围 `56 passed`；mypy 108 个文件；Ruff lint 与 124 个文件格式检查通过；context inspect 与 fake JSONL CLI smoke 退出码均为 0。原始文档保留在 [M7 归档前快照](docs/history/2026-09-22-before-m7-archive/README.md)。
 
 2026-09-21 M5 复验：全仓 pytest `123 passed`；M5 范围 `47 passed`（排除 M4 HITL 集成）；mypy 检查 68 个文件；Ruff lint 通过、92 个文件格式通过；text/jsonl CLI smoke 均通过。
 
@@ -234,4 +232,4 @@ $milestoneCount = (Select-String -Path PLAN.md -Pattern '\|\s+in_progress\s+\|')
 if ($milestoneCount -gt 1) { throw "More than one milestone is in_progress" }
 ```
 
-M5 整理前全文保存在 [历史快照](docs/history/2026-09-18-before-m5-archive/README.md)，M7 原文保存在 [M7 归档前快照](docs/history/2026-09-22-before-m7-archive/README.md)。Pi 源码分析继续沿用 M0 固定基线；M7 归档复核了 LangGraph 官方历史管理说明，未变更框架依赖。
+整理前全文保存在 [历史快照](docs/history/2026-09-18-before-m5-archive/README.md)，可恢复原文。上游与框架资料属于历史分析来源，本次文档整理未刷新网络资料。

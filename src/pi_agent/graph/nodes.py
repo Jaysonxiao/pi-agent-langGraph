@@ -3,6 +3,7 @@
 from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.runtime import Runtime
 
+from pi_agent.context.runtime import prepare_model_messages
 from pi_agent.domain.state import AgentState, AgentStateUpdate
 from pi_agent.graph.context import RunContext
 from pi_agent.tools.registry import create_error_tool_message
@@ -11,7 +12,21 @@ from pi_agent.tools.registry import create_error_tool_message
 def model_node(state: AgentState, runtime: Runtime[RunContext]) -> AgentStateUpdate:
     """Call the model and return only the state fields changed by this node."""
     try:
-        reply = runtime.context.model.invoke(state["messages"])
+        model_messages = prepare_model_messages(
+            state["messages"],
+            runtime.context.context_config,
+        )
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "error": {
+                "code": "context_error",
+                "exception_type": type(exc).__name__,
+                "message": "Context preparation failed; original messages are preserved.",
+            },
+        }
+    try:
+        reply = runtime.context.model.invoke(model_messages)
     except Exception as exc:
         return {
             "status": "failed",

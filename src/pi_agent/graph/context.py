@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from pi_agent.context.runtime import ContextConfig
 from pi_agent.models.base import ChatModel
 from pi_agent.tools.registry import ToolRegistry
 
@@ -13,6 +14,7 @@ class RunContext:
     model: ChatModel
     tools: ToolRegistry = field(default_factory=ToolRegistry)
     max_tool_rounds: int = 4
+    context_config: ContextConfig = field(default_factory=ContextConfig)
 
     def __post_init__(self) -> None:
         """Reject invalid loop configuration before graph execution starts."""
