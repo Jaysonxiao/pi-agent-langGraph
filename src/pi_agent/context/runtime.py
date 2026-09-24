@@ -7,6 +7,7 @@ from pathlib import Path
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 
 from pi_agent.context.assembly import assemble_context_messages
+from pi_agent.context.async_summarizer import AsyncSummarizer
 from pi_agent.context.compaction import plan_context_compaction
 from pi_agent.context.instructions import (
     WorkspaceInstruction,
@@ -38,6 +39,7 @@ class ContextConfig:
     compaction_threshold_tokens: int | None = None
     keep_recent_turns: int = 1
     summarizer: Summarizer | None = None
+    async_summarizer: AsyncSummarizer | None = None
 
     def __post_init__(self) -> None:
         if (self.workspace_policy is None) != (self.active_path is None):
@@ -56,9 +58,17 @@ class ContextConfig:
                 raise ValueError(f"{name} must be a positive integer.")
         if self.summary is not None and self.keep_recent_messages is None:
             raise ValueError("keep_recent_messages is required when summary is supplied.")
-        if self.summary is not None and self.summarizer is not None:
-            raise ValueError("Choose summary or summarizer, not both.")
-        if self.compaction_threshold_tokens is not None and self.summarizer is None:
+        if (
+            sum(
+                value is not None
+                for value in (self.summary, self.summarizer, self.async_summarizer)
+            )
+            > 1
+        ):
+            raise ValueError("Choose exactly one summary source.")
+        if self.compaction_threshold_tokens is not None and (
+            self.summarizer is None and self.async_summarizer is None
+        ):
             raise ValueError("compaction_threshold_tokens requires a summarizer.")
         if self.prompt_template.count("{instructions}") != 1:
             raise ValueError("prompt_template must contain exactly one {instructions} placeholder.")
@@ -118,6 +128,8 @@ def inspect_model_context(messages: Sequence[AnyMessage], config: ContextConfig)
     Required system messages and recent user turns are never silently dropped.
     Any failure leaves the original history intact and stops the main model.
     """
+    if config.async_summarizer is not None:
+        raise ContextPreparationError("Async summarizer requires async context preparation.")
     instructions = _instructions(config)
     assembled = assemble_context_messages(messages, instructions)
     rule_text = str(assembled[0].content) if instructions else ""

@@ -158,7 +158,7 @@ def _fail_tool(_: FailingArguments) -> str:
         (
             ToolRegistry(
                 [
-                    ToolDefinition(
+                    ToolDefinition[FailingArguments](
                         "fail",
                         "Always fail.",
                         FailingArguments,

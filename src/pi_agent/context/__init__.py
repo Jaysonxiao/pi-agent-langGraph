@@ -1,6 +1,8 @@
 """Context discovery, assembly, budgeting, and compaction boundaries."""
 
 from pi_agent.context.assembly import assemble_context_messages
+from pi_agent.context.async_runtime import prepare_model_messages_async
+from pi_agent.context.async_summarizer import AsyncModelSummarizer, AsyncSummarizer
 from pi_agent.context.budget import BoundedContext, fit_context_messages
 from pi_agent.context.compaction import CompactionPlan, plan_context_compaction
 from pi_agent.context.instructions import (
@@ -22,6 +24,8 @@ from pi_agent.context.summary import apply_compaction_summary
 
 __all__ = [
     "INSTRUCTION_FILENAME",
+    "AsyncModelSummarizer",
+    "AsyncSummarizer",
     "BoundedContext",
     "CompactionPlan",
     "ContextConfig",
@@ -38,4 +42,5 @@ __all__ = [
     "load_workspace_instructions",
     "plan_context_compaction",
     "prepare_model_messages",
+    "prepare_model_messages_async",
 ]

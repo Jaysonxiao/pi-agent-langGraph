@@ -34,6 +34,11 @@ class ExecutableTool(Protocol):
         """Model-visible explanation of the tool."""
         ...
 
+    @property
+    def args_schema(self) -> type[BaseModel]:
+        """Pydantic schema used to validate and describe model arguments."""
+        ...
+
     def invoke(self, raw_args: Mapping[str, object]) -> str:
         """Validate raw model arguments and execute the handler."""
         ...

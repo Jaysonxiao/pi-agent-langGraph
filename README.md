@@ -14,7 +14,7 @@ uv run mypy src tests
 uv run pytest
 ```
 
-M0–M8 have archived deliveries; M8 retains explicit live and end-to-end acceptance gaps. The fake run CLI still uses the minimal non-persistent model graph and supports text or JSONL output:
+M0–M8 have archived deliveries. The default fake run CLI remains deterministic and non-persistent:
 
 ```powershell
 uv run pi-agent --provider fake --prompt hello --events text
@@ -36,15 +36,13 @@ uv run pi-agent context inspect --provider fake --workspace . --active-path src/
 
 Inspection reports source paths, message roles, size estimates and compaction statistics without echoing prompt text. Token estimates are heuristics; real-provider capacity and summary quality remain M8/M9 work.
 
-## M8 compatible-provider verification
+## M8 compatible-provider CLI
 
-M8 provides programmatic compatible-provider and async components with offline
-tests for replies, SSE streaming, SQLite session resume, and summary/compaction.
-The current provider session still uses a minimal graph and has not wired the
-full coding-tool/retry/stream/cancellation path; see [M8 acceptance](docs/acceptance/M8.md).
-The public
-`pi-agent` command remains the deterministic fake teaching CLI; it does not
-silently read provider credentials or switch to the network path.
+The explicit `compatible` mode now runs the persistent async model/tool graph. It
+exposes workspace-confined `read`, `list`, and `search`, bounded provider retries,
+and JSONL/text graph events. It never enables network access merely because a
+`.env` file exists. See [M8 closure](docs/acceptance/M8-closure.md) for validation
+evidence and remaining boundaries.
 
 Create a local, gitignored `.env` from `.env.example` and set these values:
 
@@ -77,4 +75,22 @@ and the summary/compaction path. Passing it proves the configured endpoint's
 basic protocol integration, not summary quality or compatibility with every
 OpenAI-compatible provider.
 
-The run CLI does not yet invoke the coding-tool loop or persist its own fake run. Real provider/tool interruption is an unclosed M8 end-to-end acceptance item. See the [M5 archive](docs/acceptance/M5.md), [M6 archive](docs/acceptance/M6.md), [M7 archive](docs/acceptance/M7.md), current [PLAN.md](PLAN.md), and [LEARNING_LOG.md](LEARNING_LOG.md).
+Use a dedicated workspace containing only material you are comfortable sending
+to the configured model. `--database` must point to a file in an existing
+directory; `--session-id` chooses the durable conversation. `--trace-file` is
+optional and writes content-free event/usage metadata inside the workspace.
+
+```powershell
+uv run --env-file .env pi-agent --provider compatible --workspace .\safe-workspace --database .\sessions.sqlite --session-id demo --prompt "Read probe.txt and summarize it" --events jsonl --trace-file trace.jsonl
+uv run pi-agent session list --database .\sessions.sqlite
+```
+
+Sensitive file names such as `.env`, `.git`, private keys, and runtime caches are
+excluded from provider-visible read/search tools. This is not an OS sandbox:
+place untrusted tasks in an isolated workspace. By default no command can run.
+To let the model *propose* an allowlisted command, pass `--allow-executable`;
+this still does not execute it. Review the exact argv with `pi-agent command
+show ID --database DB`, then use the interactive `command approve` or `command
+reject` subcommand. A consumed proposal is never automatically replayed after
+a crash. The provider CLI emits completed messages and graph events; token-by-token
+terminal rendering is not yet a guarantee.

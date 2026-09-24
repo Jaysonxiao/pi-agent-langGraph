@@ -53,16 +53,20 @@ def project_message_chunk(
 ) -> StreamEvent:
     """Project one ``stream_mode="messages"`` item."""
 
+    payload: dict[str, object] = {
+        "role": _stable_role(message),
+        "content": message.content,
+        "message_id": message.id,
+        "is_chunk": isinstance(message, BaseMessageChunk),
+    }
+    if isinstance(message, AIMessage) and message.usage_metadata is not None:
+        payload["usage"] = {
+            key: message.usage_metadata.get(key)
+            for key in ("input_tokens", "output_tokens", "total_tokens")
+        }
     return StreamEvent(
         sequence=sequence,
         kind="message",
         node=_require_node_name(metadata),
-        payload={
-            "role": _stable_role(message),
-            # 原样保留 LangChain 已给出的 JSON 兼容 content, 不用 str(message).
-            "content": message.content,
-            "message_id": message.id,
-            # 用 chunk 类型区分 token 增量与完整消息, 不按 content 长度猜测.
-            "is_chunk": isinstance(message, BaseMessageChunk),
-        },
+        payload=payload,
     )

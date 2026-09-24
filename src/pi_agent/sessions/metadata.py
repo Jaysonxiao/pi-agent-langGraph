@@ -1,7 +1,8 @@
 """Application-owned session metadata, separate from LangGraph checkpoints."""
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -76,14 +77,20 @@ class SqliteSessionCatalog:
 
         return SessionRecord(*row)
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         if self._database_path.exists() and not self._database_path.is_file():
             raise ValueError(f"Metadata path must be a file: {self._database_path}")
         if not self._database_path.parent.is_dir():
             raise ValueError(
                 f"Metadata parent directory does not exist: {self._database_path.parent}"
             )
-        return sqlite3.connect(self._database_path)
+        connection = sqlite3.connect(self._database_path)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     @staticmethod
     def _migrate(connection: sqlite3.Connection) -> None:

@@ -31,6 +31,11 @@ class ToolRegistry:
         """Return a registered tool without exposing the mutable lookup table."""
         return self._tools.get(name)
 
+    @property
+    def tools(self) -> tuple[ExecutableTool, ...]:
+        """Return a stable read-only view in registration order."""
+        return tuple(self._tools.values())
+
     def execute_call(self, tool_call: ToolCall) -> ToolMessage:
         """Validate and execute one model-requested tool call.
 

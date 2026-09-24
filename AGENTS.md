@@ -42,7 +42,7 @@ uv run ruff format --check .
 uv run pi-agent --provider fake --prompt hello --events jsonl
 ```
 
-The CLI currently runs a fake minimal graph. See the M5 acceptance record for its limits; do not infer real coding-tool access from the CLI entry point.
+The default fake CLI still runs a minimal graph. Explicit `--provider compatible` runs the persistent async read-only tool graph; command execution requires a separate durable proposal and interactive approval. See the M8 correction record for validation and limits. Do not infer direct file-write access or an OS sandbox from the CLI entry point.
 
 ## Coding Style & Naming Conventions
 

@@ -1,11 +1,11 @@
 # M1–M8 文档审计与修订记录
 
-审计日期：2026-09-24（Asia/Shanghai）。检查范围：PROJECT_SPEC、PLAN、LEARNING_LOG、README、AGENTS、M1–M8 验收文档、两次旧历史快照、现有源码/测试、两条本地 Git 提交。M8 先按用户指示于 2026-09-23 归档，再进行本次文档审计。历史快照只作为过程证据，不按当前说明使用。
+审计日期：2026-09-24（Asia/Shanghai）。检查范围：PROJECT_SPEC、PLAN、LEARNING_LOG、README、AGENTS、M1–M8 验收文档、两次旧历史快照、现有源码/测试及当时可见的 Git 历史。M8 先按用户指示于 2026-09-23 归档，再进行文档审计；同日后续的代码纠正与复验另记于 [M8 纠正记录](../acceptance/M8-closure.md)。历史快照只作为过程证据，不按当前说明使用。
 
 ## 核查口径
 
 1. 需求以 [PROJECT_SPEC](../../PROJECT_SPEC.md) 为准；里程碑范围和状态以 [PLAN](../../PLAN.md) 为准；运行事实以当前源码和可执行测试为准；用户提供的 live 输出单列为用户报告。
-2. Git 仅有 `d1560b0`（回溯提交 M1–M5）和 `ba930a0`（提交 M6/M7）。这些提交不能单独证明每个子切片的具体提交时间；M8 当前在工作树中，尚无对应 commit。
+2. 初次审计时 Git 可见 `d1560b0`（回溯提交 M1–M5）和 `ba930a0`（提交 M6/M7）；后来新增 `c4e91b8` 文档整理提交。它们均不能单独证明每个子切片的具体实现时间；M8 代码当前仍有未提交工作树内容。
 3. 2026-09-24 执行 `uv run pytest -q -m 'not live' --basetemp=.pytest-tmp-doc-audit-20260923` 为 **403 passed、4 deselected**；mypy **179 source files**，Ruff lint 全部通过，format **200 files**。2026-09-23 记录的全仓结果是 **403 passed、4 skipped**，范围/日期不同，不能写成同一次运行。
 
 ## 发现与修订
@@ -29,7 +29,7 @@
 
 | ID | 疑点 | 所需依据 |
 |---|---|---|
-| V01 | 上游 Pi 的固定 SHA、路径和“默认并行”语义是否仍可由完整仓库复现 | 固定 SHA 的完整可检出源码树或可访问的 upstream archive，逐项复核 `packages/agent`、`packages/coding-agent`；此前本地临时快照不完整 |
+| V01 | **部分核实**：公开的 [固定 SHA 源码](https://github.com/earendil-works/pi/tree/96317e50b8d6e7f6d0e47fd29122baf1461c00f5) 可访问；[agent-loop.ts](https://github.com/earendil-works/pi/blob/96317e50b8d6e7f6d0e47fd29122baf1461c00f5/packages/agent/src/agent-loop.ts#L2511-L2523) 显示仅在配置 `toolExecution === "sequential"` 或工具声明 sequential 时走串行，否则走并行；[同文件](https://github.com/earendil-works/pi/blob/96317e50b8d6e7f6d0e47fd29122baf1461c00f5/packages/agent/src/agent-loop.ts#L2740-L2743) 用 `Promise.all` 执行并保持结果顺序 | 2026-09-24 仅复核上述具体路径/语义；`coding-agent` 与其他目录的逐项完整追溯仍需固定 SHA 完整源码或可访问页面，不用单文件推断全仓 |
 | V02 | M1 在 Python 3.11/3.12/3.13 的历史运行、M2–M7 的历史精确耗时/文件数 | 当时的 CI run URL 或原始命令日志；当前只保留原验收记录，Git 两次合并式提交不能独立重建 |
 | V03 | R2-A 用户报告的兼容服务 `1 passed` 及随后 ConnectError 的网络环境原因 | 用户原终端日志、endpoint 的可用性证据、在相同配置下重新执行；当前不读取密钥或请求正文 |
 | V04 | 真实 provider 的 streaming、工具调用、SQLite 续聊、摘要与 usage 是否符合其兼容协议 | 在显式 `PI_AGENT_LIVE=1` 的隔离环境运行 smoke 和只读工具回路，保留脱敏的状态/错误码与模型响应结构 |

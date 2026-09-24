@@ -3,8 +3,8 @@
 ## 1. 当前状态与文档分工
 
 - 初始规划：2026-09-02；M5 初次归档：2026-09-18；M5 遗留项复验、M6 实现与归档：2026-09-21（Asia/Shanghai）。
-- M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）按用户指示归档：代码与离线门禁完成，全仓 403 passed、4 个 live gate 预期 skip；一次真实普通回复由用户报告通过。真实 streaming、resume、summary 和 provider/tool 端到端接线仍未验收，见 [M8](docs/acceptance/M8.md) 与 [后续清单](docs/follow-ups/M1-M8.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
-- M5 同步取消与 M8 异步组件已分别验证；真实 provider/tool 的异步中断、超时和取消端到端传播仍是 M8 遗留项。
+- M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）首次归档；2026-09-24 补齐真实 Provider CLI 只读闭环、重试/时限、命令人审入口，并在配置的 compatible 服务完成 4 个 live smoke 与合成文件 CLI 工具调用。初次归档与后续复验分列于 [M8](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
+- M5 同步取消与 M8 异步组件、主请求取消接线已分别验证；真实传输中取消、429 故障注入和跨平台进程树仍按 [剩余清单](docs/follow-ups/M1-M8.md) 单列，不扩大现有 smoke 结论。
 
 | 文件 | 唯一职责 |
 |---|---|
@@ -27,7 +27,7 @@
 | M5 | 流式事件与 CLI 闭环 | completed | MVP | [M5](docs/acceptance/M5.md)，2026-09-21 遗留项闭合复验 |
 | M6 | 会话持久化、恢复与分支 | completed | MVP | [M6](docs/acceptance/M6.md)，2026-09-21 归档 |
 | M7 | 上下文装配与长对话压缩 | completed | 增强 | [M7](docs/acceptance/M7.md)，2026-09-22 最终验收与归档 |
-| M8 | 模型适配、重试、取消与容错 | completed | 增强 | 2026-09-23 按用户指示归档已交付范围；保留真实服务与端到端接线验收缺口；[M8 归档](docs/acceptance/M8.md) |
+| M8 | 模型适配、重试、取消与容错 | completed | 增强 | 2026-09-23 首次归档；2026-09-24 接线纠正与真实 provider 复验；[M8 归档](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md) |
 | M9 | 扩展、可观测性与评测 | pending | 生产化 | 尚未启动 |
 | M10 | 远程协议与客户端/服务端 | pending | 可选扩展 | 尚未启动 |
 | M11 | 全链路验收与架构复盘 | pending | 收束 | 尚未启动 |
@@ -58,7 +58,7 @@ Pi 是一组可组合包，而不只是 CLI：
 | `AgentState` / `AgentMessage` | `TypedDict`/Pydantic 边界模型 + LangChain messages + reducer |
 | `runLoop()` | `StateGraph` 的 model/tool 节点、条件边和 `Command` |
 | `AgentTool` + TypeBox | `@tool`/Pydantic 参数模型 + 自定义安全执行器 |
-| `AgentEvent` / streaming | 同步及异步事件投影组件已实现；真实 provider CLI 的端到端流仍待接线/验收 |
+| `AgentEvent` / streaming | 同步/异步投影及真实 Provider CLI 节点级/完整消息事件已接线；CLI token-by-token 输出仍非保证 |
 | steer/follow-up | 应用层输入队列；图只消费已提交的下一批输入 |
 | JSONL session tree | LangGraph checkpointer + 独立 session 元数据仓储 |
 | branch/restore | `get_state_history()`、checkpoint config、`update_state()` |
@@ -186,11 +186,9 @@ M4 交付的是安全工具、文件审批和 prepare→approval→apply 集成�
 
 M8.1–M8.9 的配置、模型适配、工具 schema、同步/异步重试策略、异步模型/上下文、流投影、用量、取消与进程组件、异步 SQLite、Provider 会话入口及离线测试均已交付。实现经过 2026-09-23 全仓验证和 2026-09-24 的离线复验。详细切片过程和历史判定保存在 [整理前快照](docs/history/2026-09-23-m1-m8-review/PLAN.md)，当前实际结果见 [M8 归档](docs/acceptance/M8.md)。
 
-已证实的断点：`run_provider_session()` 注入模型并使用 async minimal graph，尚未选择 async tool graph，也未接入只读注册表、schema、重试策略或 SSE 事件输出；`CompatibleHttpClient` 可解析工具响应，却没有发送 `tools` schema。异步进程在真实 POSIX 中缺少独立进程组 spawn，且正常结果将 returncode 固定为 0。这些问题列在 [后续任务](docs/follow-ups/M1-M8.md)，不能从组件级测试推断真实闭环完成。
+2026-09-23 初次归档时的断点已在 2026-09-24 的 [纠正记录](docs/acceptance/M8-closure.md) 中逐项处理：Provider session 改为 async tool graph，HTTP 发送只读 schema，公开 CLI 可显式使用 compatible provider，模型请求接入 retry/deadline/cancel，命令另走持久提案与人审。真实 provider 4 个 live smoke 和合成只读 CLI 闭环已通过。不能将该结果扩展为 POSIX 实进程树、真实 429 注入、跨资源恰好一次或语义摘要质量通过；余项见 [后续清单](docs/follow-ups/M1-M8.md)。
 
-真实网络证据：用户此前报告普通回复 smoke `1 passed`；本轮本地离线复验未设置 `PI_AGENT_LIVE=1`，streaming、续聊和摘要的真实网络验收仍待执行。归档是已交付代码和离线范围的状态变更，未关闭原定真实联调与取消/超时端到端验收。
-
-验证入口：`uv run pytest -q -m 'not live' --basetemp=.pytest-tmp-doc-audit-20260923`；`uv run mypy src tests`；`uv run ruff check .`；`uv run ruff format --check .`。真实 smoke 命令和前置条件见 [README](README.md) 与 [M8 归档](docs/acceptance/M8.md)。
+验证入口：`uv run pytest -q -m 'not live' --basetemp=.pytest-tmp-m8-close`；`uv run mypy src tests`；`uv run ruff check src tests`；`uv run ruff format --check src tests`。真实 smoke 命令、前置条件与脱敏范围见 [README](README.md) 与 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 
 
 ### M9 — 扩展、可观测性与评测

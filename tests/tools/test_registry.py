@@ -60,7 +60,9 @@ def test_execute_call_converts_handler_exception_to_error_message() -> None:
     def explode(_: ExplodeArguments) -> str:
         raise RuntimeError("controlled explosion")
 
-    registry = ToolRegistry([ToolDefinition("explode", "Always fail.", ExplodeArguments, explode)])
+    registry = ToolRegistry(
+        [ToolDefinition[ExplodeArguments]("explode", "Always fail.", ExplodeArguments, explode)]
+    )
 
     result = registry.execute_call(_call("explode", {"value": "x"}, "call-error"))
 
@@ -84,7 +86,7 @@ def test_execute_call_treats_handler_validation_error_as_execution_error() -> No
 
     registry = ToolRegistry(
         [
-            ToolDefinition(
+            ToolDefinition[ExplodeArguments](
                 "internal_validation",
                 "Raise ValidationError inside the handler.",
                 ExplodeArguments,

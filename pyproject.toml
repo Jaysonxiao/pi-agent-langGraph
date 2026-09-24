@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 scripts = { pi-agent = "pi_agent.cli.app:main" }
 dependencies = [
+    "httpx>=0.28,<1",
     "langchain-core>=1.2,<2",
     "langgraph>=1.2,<1.3",
     "langgraph-checkpoint-sqlite>=3.1,<4",
@@ -28,8 +29,11 @@ dev = [
 packages = ["src/pi_agent"]
 
 [tool.pytest.ini_options]
-addopts = ["-ra", "--strict-config", "--strict-markers"]
+addopts = ["-ra", "--strict-config", "--strict-markers", "--import-mode=importlib"]
 testpaths = ["tests"]
+markers = [
+    "live: requires explicit provider configuration and may access the configured endpoint",
+]
 
 [tool.ruff]
 line-length = 100
@@ -43,6 +47,8 @@ select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+explicit_package_bases = true
+mypy_path = "src"
 files = ["src", "tests"]
 
 [tool.coverage.run]

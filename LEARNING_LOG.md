@@ -4,9 +4,9 @@
 
 - 更新日期：2026-09-24；时区：Asia/Shanghai。
 - 学习者基础：具备 Python 基础，学习过 LangChain/LangGraph 常规用法；目标是能独立设计、实现和审查 Agent 系统。
-- 进度：M0–M8 已按交付范围归档；M8 离线验收为 403 passed、4 个 live gate skip，R2-A 有一次真实普通回复成功报告。真实 streaming、resume、summary 和端到端工具/重试/取消接线仍有缺口，不随归档关闭。M8.3/M8.4 与 R2-D–R2-F 由助手代写，学习者复盘单独进行。
+- 进度：M0–M8 已归档。M8 于 2026-09-23 初次归档，2026-09-24 完成端到端纠正：离线 403 passed、4 live deselected；配置的 compatible provider 4 个 live smoke 和隔离工作区 CLI 只读工具闭环通过。Linux/POSIX 实进程树、真实 429/网络中取消、语义摘要质量等不随本次复验自动通过。M8.3/M8.4 与 R2-D–R2-F 由助手代写，学习者复盘单独进行。
 - 当前练习：无。现行任务与验收边界见 [PLAN](PLAN.md)、[M8](docs/acceptance/M8.md) 和 [后续清单](docs/follow-ups/M1-M8.md)。
-- 当前能力：最小图、fake 工具循环、安全文件/进程组件、独立文件审批图、流式事件、SQLite 会话恢复/历史/分支、metadata 列表 CLI、上下文装配/摘要与诊断，以及 M8 的 compatible provider 和异步组件。默认 CLI 仍使用无持久化最小图；程序化 provider session 也未连通完整 coding tool、retry、stream/cancel 链路。
+- 当前能力：默认 fake CLI 仍使用无持久化最小图；显式 compatible CLI 已连通异步只读工具图、受控模型重试/时限、SQLite 会话与节点事件。命令仅能由模型提案，再由人审入口执行；文件写入仍是独立 M4 审批边界。完整闭环、证据和限制见 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 - 状态唯一来源：[PLAN.md](PLAN.md)。本日志只总结学习和决策；旧过程流水见 [整理前快照](docs/history/2026-09-18-before-m5-archive/README.md)。
 
 ## 时间线
@@ -23,7 +23,7 @@
 | M5 | 2026-09-16 至 2026-09-21 | 2026-09-18 初次归档；2026-09-21 闭合复验 | 同步事件/CLI 教学范围完整验收 |
 | M6 | 2026-09-21 | 2026-09-21 归档 | 会话持久化、恢复、历史、状态分支与 metadata CLI |
 | M7 | 2026-09-21 至 2026-09-22 | 2026-09-22 修复、最终验收与归档 | 上下文装配、同步摘要与失败恢复、诊断 CLI |
-| M8 | 2026-09-22 至 2026-09-23 | 2026-09-23 已交付范围归档；2026-09-24 离线复验 | compatible provider/异步组件；真实网络及端到端接线缺口保留 |
+| M8 | 2026-09-22 至 2026-09-24 | 2026-09-23 首次归档；2026-09-24 端到端纠正及真实服务复验 | compatible provider/异步组件/公开 CLI 只读闭环；部分跨平台和质量复验保留 |
 
 阶段测试数是当时证据：M1 全仓 1、M2 全仓 9、M3 全仓 22、M4 当时全仓 76；M4 重验范围为 53；2026-09-18 全仓为 116、M5 范围为 40；2026-09-21 闭合复验全仓为 123、M5 范围为 47。这些数字对应不同时间和范围，不能混写为同一轮验证。
 
@@ -135,11 +135,13 @@ M7 已归档。贯穿请求从 SQLite 原始历史和活动文件进入，按 gl
 
 本轮关键复盘：Provider SSE 必须等 `[DONE]` 才能提交完整消息和 usage，EOF 视为断流；第二轮工具请求必须回传 assistant `tool_calls`，否则孤立的 `ToolMessage` 不符合兼容协议；session resume 的证明点是第二次调用真正看到 checkpoint 历史，而不只是最终 state 看起来连续；摘要是临时上下文派生，原始 durable history 不被摘要替换。节点主动取消在 LangGraph 图边界表现为以 `CancelledError` 为 cause 的 `NodeCancelledError`。为使全仓门禁可执行，pytest 固定 importlib 导入，mypy 固定 `src` 包基准，消除了同名测试模块冲突。
 
-M8 开始时源码核对发现原有 ChatModel、摘要、registry 与会话入口均为同步路径；如今这些异步组件已分别补齐，但 CLI 仍只公开 fake 最小图，provider session 也仍未把工具、重试、stream/取消全量接线。学习重点是：函数叫异步不等于底层可取消；模型重试不能重放已执行工具；部分回答发出后重试会造成重复输出；摘要也需要超时、取消和独立事件归属。工厂和 SDK 适配保留在模型边界，LangGraph 继续负责图与状态。
+M8 初次归档时，异步组件虽分别补齐，CLI 仍只公开 fake 最小图，provider session 未把工具、重试、事件/取消接线。学习重点是：函数叫异步不等于底层可取消；模型重试不能重放已执行工具；部分回答发出后重试会造成重复输出；摘要也需要超时、取消和独立事件归属。工厂和 SDK 适配保留在模型边界，LangGraph 继续负责图与状态。
 
-规划决策：只设一个模型重试所有者，SDK 内层重试关闭；完整回复才提交消息状态；凭据仅存运行依赖；错误、日志和 checkpoint 统一使用安全字段；异步 SQLite/最小只读 CLI 接线作为本阶段集成依赖。真实请求必须由 `PI_AGENT_LIVE=1` 与显式 `--env-file .env` 双重启用；默认测试永不触网。
+规划决策：只设一个模型重试所有者，SDK 内层重试关闭；完整回复才提交消息状态；凭据仅存运行依赖；错误、日志和 checkpoint 统一使用安全字段。`tests/live` 的真实请求必须由 `PI_AGENT_LIVE=1` 与显式加载 `.env` 双重启用，默认测试不触网；公开 CLI 只在显式 `--provider compatible` 且提供有效配置时才发起真实请求。
 
 当时 Context7 工具不可用，改用官方框架文档及固定提交 Pi agent-loop 源码；本地临时上游快照的 HEAD 和 provider 文件不完整，不把它当作完整可验证 checkout。M8 的详细设计为本项目选择，不宣称复制了尚未核验的 Pi provider 重试实现。真实普通回复已有用户执行的成功证据；streaming/resume/summary live tests 未启用网络，不能将 4 个默认 skip 写成真实服务通过。2026-09-23 用户要求先归档已交付范围；2026-09-24 离线复验 403 passed、4 deselected，详见 [阶段总结](docs/stage-summary/M1-M8.md) 与 [审计](docs/reviews/M1-M8-audit.md)。
+
+2026-09-24 端到端纠正：HTTP 绑定 `tools` schema，Provider 会话选择 async tool graph，公开 CLI 接通隔离工作区的 read/list/search、SQLite 续聊、节点事件与脱敏 trace；命令只产生持久提案，需交互人审后才能一次性领取并执行。Windows 本机实跑非零退出码、输出洪流截断、越界 cwd 拒绝；真实 compatible provider 普通回复、SSE、续聊、摘要 4 项通过，合成文件真实 read→ToolMessage→最终回复也通过。复盘要点是“允许列表 + cwd”不是 OS 沙箱；副作用恢复采取 fail-closed 的 at-most-once 领取，不能声称跨资源恰好一次。详细证据见 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 
 ## 关键决策
 
@@ -151,7 +153,7 @@ M8 开始时源码核对发现原有 ChatModel、摘要、registry 与会话入�
 | 事件边界 | 消息、状态和 custom 分开投影，统一 sequence，再给 renderer 消费 |
 | 持久化 | checkpointer 保存 thread 内图状态，session metadata 另设应用边界；M6 开发环境使用 SQLite，生产 saver 留接口 |
 | Provider | 先 fake 再真实适配；M5 fake CLI 不代表真实 token 流已验收 |
-| 取消 | M5 完成同步消费侧协作取消与资源释放；M8 实现异步组件，provider/tool 端到端传播仍未验收 |
+| 取消 | M5 完成同步消费侧协作取消；M8 接入 provider 请求和工具 owned task，真实传输中取消仍需故障注入复验 |
 | 测试方法 | 测试通过只证明已写断言；需覆盖不应发生的副作用和真实数据形状 |
 | 学习方式 | 先完整链路，再小练习，再返回系统；切片按所属里程碑汇总 |
 
@@ -171,7 +173,7 @@ M8 开始时源码核对发现原有 ChatModel、摘要、registry 与会话入�
 | 归属 | 问题 | 下一步/证据位置 |
 |---|---|---|
 | M8/M9 | 供应商 tokenizer、多模态计费与真实摘要语义质量 | M7 已验收确定性估算/假模型调用与恢复；后续用真实 provider 做质量和容量评测 |
-| M8 | provider 与工具 schema/执行、异步流、重试/取消的端到端接线；真实 streaming/resume/summary 验收 | [M8 归档缺口](docs/acceptance/M8.md) 与 [F01–F05](docs/follow-ups/M1-M8.md) |
+| M8 跨环境复验 | POSIX 实进程树、真实 429/传输中取消、命令 `claimed` 后崩溃核对 | [M8 纠正记录](docs/acceptance/M8-closure.md) 与 [剩余清单](docs/follow-ups/M1-M8.md) |
 | 生产持久化 | SQLite 仅为开发存储；checkpoint 与 metadata 跨连接写入不是原子事务；CLI 无默认数据库策略 | 保留为后续生产化设计，不反向扩张 M6 归档范围 |
 | M9–M11 | 扩展、评测、可选远程和全系统验收 | 按 PLAN 范围逐步进入 |
 

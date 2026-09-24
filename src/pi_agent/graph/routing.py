@@ -6,6 +6,7 @@ from langgraph.graph import END
 from langgraph.runtime import Runtime
 
 from pi_agent.domain.state import AgentState
+from pi_agent.graph.async_context import AsyncRunContext
 from pi_agent.graph.context import RunContext
 
 
@@ -17,7 +18,7 @@ def route_after_model(state: AgentState) -> Literal["__end__"]:
 
 
 def route_after_tool_model(
-    state: AgentState, runtime: Runtime[RunContext]
+    state: AgentState, runtime: Runtime[RunContext | AsyncRunContext]
 ) -> Literal["tools", "tool_limit", "__end__"]:
     """Route a completed model update to tools, the loop guard, or END."""
     if state["status"] in {"completed", "failed"}:
