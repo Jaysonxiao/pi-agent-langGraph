@@ -12,6 +12,7 @@ from typing import TextIO, cast
 from pi_agent.cli.cancel import CancellationToken, iter_cancellable
 from pi_agent.cli.command import add_command_parser, run_command_cli
 from pi_agent.cli.context import add_context_parser, run_context_cli
+from pi_agent.cli.eval import add_eval_parser, run_eval_cli
 from pi_agent.cli.provider import ProviderCliOptions
 from pi_agent.cli.read_only import CliWorkspacePathPolicy
 from pi_agent.cli.render import render_event
@@ -53,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command")
     add_context_parser(commands)
     add_command_parser(commands)
+    add_eval_parser(commands)
     session_parser = commands.add_parser("session")
     session_commands = session_parser.add_subparsers(dest="session_command", required=True)
     list_parser = session_commands.add_parser("list")
@@ -200,6 +202,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return EXIT_CANCELLED
         except Exception as exc:
             sys.stderr.write(f"Command review failed: {type(exc).__name__}.\n")
+            return EXIT_FAILURE
+    if args.command == "eval":
+        try:
+            return run_eval_cli(args, sys.stdout)
+        except KeyboardInterrupt:
+            return EXIT_CANCELLED
+        except Exception as exc:
+            # 评测 CLI 只报告异常类型, 避免把 prompt、回复正文或凭据写到 stderr.
+            sys.stderr.write(f"Eval run failed: {type(exc).__name__}.\n")
             return EXIT_FAILURE
     if args.prompt is None:
         parser.error("--prompt is required unless running a session command.")

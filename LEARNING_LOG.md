@@ -4,8 +4,8 @@
 
 - 更新日期：2026-09-24；时区：Asia/Shanghai。
 - 学习者基础：具备 Python 基础，学习过 LangChain/LangGraph 常规用法；目标是能独立设计、实现和审查 Agent 系统。
-- 进度：M0–M8 已归档。M8 于 2026-09-23 初次归档，2026-09-24 完成端到端纠正：离线 403 passed、4 live deselected；配置的 compatible provider 4 个 live smoke 和隔离工作区 CLI 只读工具闭环通过。Linux/POSIX 实进程树、真实 429/网络中取消、语义摘要质量等不随本次复验自动通过。M8.3/M8.4 与 R2-D–R2-F 由助手代写，学习者复盘单独进行。
-- 当前练习：无。现行任务与验收边界见 [PLAN](PLAN.md)、[M8](docs/acceptance/M8.md) 和 [后续清单](docs/follow-ups/M1-M8.md)。
+- 进度：M0–M9 已按各自交付范围归档。M9 最终组合测试 **28 passed**、mypy **203 source files**、Ruff lint/format 与 fake eval CLI 由用户于 2026-09-24 报告通过；live eval、默认 CLI telemetry 与 CLI 工具轨迹仍按 [M9 归档](docs/acceptance/M9.md) 的边界跟踪。M8 的 Linux/POSIX 实进程树、真实 429/网络中取消、语义摘要质量等不随 M9 归档自动通过。
+- 当前练习：M9 已交付范围完成归档；M10 远程协议为可选扩展，M11 全链路验收尚未启动。下一步以 [PLAN](PLAN.md) 的里程碑状态和 [M9 归档](docs/acceptance/M9.md) 的未关闭边界为准。
 - 当前能力：默认 fake CLI 仍使用无持久化最小图；显式 compatible CLI 已连通异步只读工具图、受控模型重试/时限、SQLite 会话与节点事件。命令仅能由模型提案，再由人审入口执行；文件写入仍是独立 M4 审批边界。完整闭环、证据和限制见 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 - 状态唯一来源：[PLAN.md](PLAN.md)。本日志只总结学习和决策；旧过程流水见 [整理前快照](docs/history/2026-09-18-before-m5-archive/README.md)。
 
@@ -24,6 +24,7 @@
 | M6 | 2026-09-21 | 2026-09-21 归档 | 会话持久化、恢复、历史、状态分支与 metadata CLI |
 | M7 | 2026-09-21 至 2026-09-22 | 2026-09-22 修复、最终验收与归档 | 上下文装配、同步摘要与失败恢复、诊断 CLI |
 | M8 | 2026-09-22 至 2026-09-24 | 2026-09-23 首次归档；2026-09-24 端到端纠正及真实服务复验 | compatible provider/异步组件/公开 CLI 只读闭环；部分跨平台和质量复验保留 |
+| M9 | 2026-09-24 | 2026-09-24 已交付范围归档 | 最终组合范围 28 passed；mypy 203 个文件、Ruff 与 fake eval CLI 通过；live 与默认 CLI telemetry 边界保留 |
 
 阶段测试数是当时证据：M1 全仓 1、M2 全仓 9、M3 全仓 22、M4 当时全仓 76；M4 重验范围为 53；2026-09-18 全仓为 116、M5 范围为 40；2026-09-21 闭合复验全仓为 123、M5 范围为 47。这些数字对应不同时间和范围，不能混写为同一轮验证。
 
@@ -143,6 +144,16 @@ M8 初次归档时，异步组件虽分别补齐，CLI 仍只公开 fake 最小�
 
 2026-09-24 端到端纠正：HTTP 绑定 `tools` schema，Provider 会话选择 async tool graph，公开 CLI 接通隔离工作区的 read/list/search、SQLite 续聊、节点事件与脱敏 trace；命令只产生持久提案，需交互人审后才能一次性领取并执行。Windows 本机实跑非零退出码、输出洪流截断、越界 cwd 拒绝；真实 compatible provider 普通回复、SSE、续聊、摘要 4 项通过，合成文件真实 read→ToolMessage→最终回复也通过。复盘要点是“允许列表 + cwd”不是 OS 沙箱；副作用恢复采取 fail-closed 的 at-most-once 领取，不能声称跨资源恰好一次。详细证据见 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 
+## M9 — 扩展、可观测性与评测（已交付范围归档）
+
+M9 把 M8 已能运行的 provider/tool/session 链路变成可解释、可关联、可重复评测的系统。贯穿请求为 `请读取 probe.txt 并总结`：同一 `thread_id/run_id` 下应观察 run、model、tool 的前后事件，后续 telemetry 形成父子 span，fake eval 对最终回复、工具调用与脱敏 artifact 做确定性断言。
+
+M9.1 先缩小到观察型 hook registry。Pi 固定源码中的 `ExtensionRunner` 按 extension/handler 注册顺序串行派发事件，并对多数观察/变换事件收集扩展错误；tool-call 拦截具有更强的失败语义。本项目首版不复制任意 TypeScript/Python 插件加载、UI/命令注册和结果改写，只允许应用显式注入 async handler，并且事件不携带 prompt、工具参数、回复或输出。这样普通观察 hook 可以 fail-open，取消仍作为控制流传播；未来若增加安全拦截 hook，必须另设 fail-closed 契约，不能复用观察型语义。
+
+脚手架提供 `HookEvent`、`HookFailure`、`HookDispatchResult` 与注册表。学习者完成 `HookRegistry.dispatch()`：对注册表取快照并保持调用顺序；普通异常隔离后仅记录类型名；`CancelledError` 原样传播。学习者报告目标测试 `5 passed`；本轮 mypy 检查 185 个源文件、Ruff lint 与 format 均通过。审查确认实现与契约一致。
+
+同一请求仍按 M8 的 `probe.txt → read → ToolMessage → 最终回复` 路径执行。M9.1–M9.3 为同一 run 增加有序、隔离故障的 run/model/tool hooks 与脱敏 telemetry 接口；M9.6 将事件接为同一 trace 的 root/model/tool spans，并修复 child `end()` 失败时其余 spans 的清理。M9.4–M9.5 提供确定性 fake judge、无正文 JSON 报告和公开 smoke CLI。新文件位于 `extensions/`、`telemetry/`、`evals/` 与 `cli/eval.py`：Provider/graph 上游产生受限元数据，telemetry 和 eval 下游消费，checkpoint 状态不承载这些运行期依赖。最终组合范围 28 passed、mypy 203 个文件、Ruff 与 fake smoke CLI 通过，均为用户执行报告；归档范围和开放边界见 [M9 归档](docs/acceptance/M9.md)。
+
 ## 关键决策
 
 | 决策 | 结论与原因 |
@@ -172,10 +183,10 @@ M8 初次归档时，异步组件虽分别补齐，CLI 仍只公开 fake 最小�
 
 | 归属 | 问题 | 下一步/证据位置 |
 |---|---|---|
-| M8/M9 | 供应商 tokenizer、多模态计费与真实摘要语义质量 | M7 已验收确定性估算/假模型调用与恢复；后续用真实 provider 做质量和容量评测 |
+| 后续真实模型质量评测 | 供应商 tokenizer、多模态计费与真实摘要语义质量 | M7 已验收确定性估算/假模型调用与恢复；后续用真实 provider 做质量和容量评测 |
 | M8 跨环境复验 | POSIX 实进程树、真实 429/传输中取消、命令 `claimed` 后崩溃核对 | [M8 纠正记录](docs/acceptance/M8-closure.md) 与 [剩余清单](docs/follow-ups/M1-M8.md) |
 | 生产持久化 | SQLite 仅为开发存储；checkpoint 与 metadata 跨连接写入不是原子事务；CLI 无默认数据库策略 | 保留为后续生产化设计，不反向扩张 M6 归档范围 |
-| M9–M11 | 扩展、评测、可选远程和全系统验收 | 按 PLAN 范围逐步进入 |
+| M9 归档后 / M10–M11 | M9 未关闭边界、可选远程和全系统验收 | M9 边界见 [归档记录](docs/acceptance/M9.md)；M10 可选，M11 尚未启动 |
 
 ## 本次整理记录与后续写法
 

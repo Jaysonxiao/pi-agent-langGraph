@@ -4,6 +4,7 @@
 
 - 初始规划：2026-09-02；M5 初次归档：2026-09-18；M5 遗留项复验、M6 实现与归档：2026-09-21（Asia/Shanghai）。
 - M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）首次归档；2026-09-24 补齐真实 Provider CLI 只读闭环、重试/时限、命令人审入口，并在配置的 compatible 服务完成 4 个 live smoke 与合成文件 CLI 工具调用。初次归档与后续复验分列于 [M8](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
+- M9 于 2026-09-24 启动、完成已交付范围并归档。用户报告最终组合测试 **28 passed**、mypy **203 source files**、Ruff lint/format 与 fake eval CLI 通过；默认 CLI telemetry、带工具调用的 CLI eval 和可选 live eval 的边界见 [M9 归档](docs/acceptance/M9.md)。
 - M5 同步取消与 M8 异步组件、主请求取消接线已分别验证；真实传输中取消、429 故障注入和跨平台进程树仍按 [剩余清单](docs/follow-ups/M1-M8.md) 单列，不扩大现有 smoke 结论。
 
 | 文件 | 唯一职责 |
@@ -12,7 +13,7 @@
 | PLAN.md | 当前状态、里程碑范围、验收要求、阶段接口 |
 | LEARNING_LOG.md | 学习者基础、按里程碑总结、关键决策、问题索引 |
 | docs/acceptance/Mx.md | 对应里程碑的验收命令、结果、局限和归档结论 |
-| docs/README.md | M1–M8 文档索引；审计、总结与后续任务入口 |
+| docs/README.md | M1–M9 文档索引；审计、总结与后续任务入口 |
 | docs/history/ | 已封存的过程记录；不能作为当前任务清单 |
 
 状态取值为 `pending / in_progress / completed / blocked`；最多一个 `in_progress`，阶段间允许为零。归档只证明对应验收文件声明的范围，不能把教学范围扩张成生产能力。
@@ -28,7 +29,7 @@
 | M6 | 会话持久化、恢复与分支 | completed | MVP | [M6](docs/acceptance/M6.md)，2026-09-21 归档 |
 | M7 | 上下文装配与长对话压缩 | completed | 增强 | [M7](docs/acceptance/M7.md)，2026-09-22 最终验收与归档 |
 | M8 | 模型适配、重试、取消与容错 | completed | 增强 | 2026-09-23 首次归档；2026-09-24 接线纠正与真实 provider 复验；[M8 归档](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md) |
-| M9 | 扩展、可观测性与评测 | pending | 生产化 | 尚未启动 |
+| M9 | 扩展、可观测性与评测 | completed | 生产化 | [M9 归档](docs/acceptance/M9.md)，2026-09-24 已交付离线范围验收；未关闭边界保留 |
 | M10 | 远程协议与客户端/服务端 | pending | 可选扩展 | 尚未启动 |
 | M11 | 全链路验收与架构复盘 | pending | 收束 | 尚未启动 |
 
@@ -80,8 +81,10 @@ src/pi_agent/
   models/        # 模型协议、compatible HTTP 适配与 fake
   sessions/      # checkpoint 与 session 元数据
   context/       # AGENTS/skills/prompt/compaction
-  runtime/       # orchestration、hooks、取消、重试
-  telemetry/     # M9 目标，当前尚无此目录
+  runtime/       # orchestration、取消、重试
+  extensions/    # M9 受约束 lifecycle hooks
+  telemetry/     # M9 后端无关 spans、metrics/log ports 与 lifecycle adapter
+  evals/         # M9 fake suite/case/judge 与稳定 JSON report
   cli/           # 命令与渲染
 tests/           # 与 src 镜像
 docs/acceptance/ # 每个里程碑的验收记录
@@ -89,7 +92,7 @@ docs/acceptance/ # 每个里程碑的验收记录
 
 ## 5. 里程碑契约
 
-每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M9–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
+每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M10–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
 
 ### M0 — 源码分析与路线设计
 
@@ -199,6 +202,10 @@ M8.1–M8.9 的配置、模型适配、工具 schema、同步/异步重试策略
 - **交付物**：hook registry、telemetry adapter、eval harness、基线报告。
 - **验收标准**：hook 顺序确定且故障隔离；trace 可关联 thread/run/tool；回归评测可重复；无密钥写入 artifact。
 - **验证命令**：`uv run pytest tests/extensions tests/telemetry tests/evals -q`；`uv run pi-agent eval --suite smoke --provider fake`。
+
+#### M9 归档结论
+
+M9.1–M9.6 已交付观察型 hook、Provider/model/tool 生命周期、脱敏 span/metrics/log 接口、lifecycle-to-span adapter、fake eval harness 与 smoke CLI。2026-09-24 用户报告最终组合范围 28 passed、mypy 203 个文件、Ruff lint/format 与 fake eval CLI 通过。归档表示该离线教学范围结案；默认 CLI telemetry、带工具调用的 CLI eval 和可选 live eval 仍按 [M9 归档的未关闭边界](docs/acceptance/M9.md) 跟踪。
 
 ### M10 — 远程协议与客户端/服务端
 

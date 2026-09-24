@@ -34,7 +34,7 @@ uv run pi-agent context inspect --provider fake
 uv run pi-agent context inspect --provider fake --workspace . --active-path src/pi_agent --max-tokens 4096
 ```
 
-Inspection reports source paths, message roles, size estimates and compaction statistics without echoing prompt text. Token estimates are heuristics; real-provider capacity and summary quality remain M8/M9 work.
+Inspection reports source paths, message roles, size estimates and compaction statistics without echoing prompt text. Token estimates are heuristics; real-provider capacity and summary quality remain open for later evaluation.
 
 ## M8 compatible-provider CLI
 
