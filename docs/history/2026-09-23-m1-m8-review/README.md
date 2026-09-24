@@ -1,6 +1,6 @@
 # Pi Agent LangGraph
 
-This repository is a teaching-focused Python reconstruction of Pi Agent's core behavior using LangGraph. Development proceeds one independently testable milestone at a time; see [PLAN.md](PLAN.md) for scope and acceptance criteria. For the M1–M8 document map, stage summaries, audit and prioritized follow-ups, see [docs/README.md](docs/README.md).
+This repository is a teaching-focused Python reconstruction of Pi Agent's core behavior using LangGraph. Development proceeds one independently testable milestone at a time; see `PLAN.md` for scope and acceptance criteria.
 
 ## Development
 
@@ -14,7 +14,7 @@ uv run mypy src tests
 uv run pytest
 ```
 
-M0–M8 have archived deliveries; M8 retains explicit live and end-to-end acceptance gaps. The fake run CLI still uses the minimal non-persistent model graph and supports text or JSONL output:
+M0–M7 have archived deliveries. The fake run CLI still uses the minimal non-persistent model graph and supports text or JSONL output:
 
 ```powershell
 uv run pi-agent --provider fake --prompt hello --events text
@@ -38,11 +38,8 @@ Inspection reports source paths, message roles, size estimates and compaction st
 
 ## M8 compatible-provider verification
 
-M8 provides programmatic compatible-provider and async components with offline
-tests for replies, SSE streaming, SQLite session resume, and summary/compaction.
-The current provider session still uses a minimal graph and has not wired the
-full coding-tool/retry/stream/cancellation path; see [M8 acceptance](docs/acceptance/M8.md).
-The public
+M8 provides a programmatic compatible-provider boundary for complete replies,
+SSE streaming, SQLite session resume, and async summary/compaction. The public
 `pi-agent` command remains the deterministic fake teaching CLI; it does not
 silently read provider credentials or switch to the network path.
 
@@ -77,4 +74,4 @@ and the summary/compaction path. Passing it proves the configured endpoint's
 basic protocol integration, not summary quality or compatibility with every
 OpenAI-compatible provider.
 
-The run CLI does not yet invoke the coding-tool loop or persist its own fake run. Real provider/tool interruption is an unclosed M8 end-to-end acceptance item. See the [M5 archive](docs/acceptance/M5.md), [M6 archive](docs/acceptance/M6.md), [M7 archive](docs/acceptance/M7.md), current [PLAN.md](PLAN.md), and [LEARNING_LOG.md](LEARNING_LOG.md).
+The run CLI does not yet invoke the coding-tool loop or persist its own fake run. Real provider/tool interruption remains a later runtime concern. See the [M5 archive](docs/acceptance/M5.md), [M6 archive](docs/acceptance/M6.md), [M7 archive](docs/acceptance/M7.md), current [PLAN.md](PLAN.md), and [LEARNING_LOG.md](LEARNING_LOG.md).

@@ -54,7 +54,7 @@ Use pytest. Name files `test_<subject>.py` and tests `test_<behavior>`. Cover gr
 
 ## Commit & Pull Request Guidelines
 
-Git history is available but currently contains only a small number of retrospective commits, so no stable repository-specific convention can be inferred. Use concise Conventional Commit subjects such as `feat: add minimal tool loop` or `test: cover command timeout`. Keep commits milestone-focused. Pull requests should explain the architectural change, list verification commands and results, link the relevant plan item or issue, and include terminal output or screenshots when CLI behavior changes.
+Git history is not available in this workspace, so no repository-specific convention can be inferred. Use concise Conventional Commit subjects such as `feat: add minimal tool loop` or `test: cover command timeout`. Keep commits milestone-focused. Pull requests should explain the architectural change, list verification commands and results, link the relevant plan item or issue, and include terminal output or screenshots when CLI behavior changes.
 
 ## Security & Agent Safety
 

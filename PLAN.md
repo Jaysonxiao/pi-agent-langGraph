@@ -3,8 +3,8 @@
 ## 1. 当前状态与文档分工
 
 - 初始规划：2026-09-02；M5 初次归档：2026-09-18；M5 遗留项复验、M6 实现与归档：2026-09-21（Asia/Shanghai）。
-- M0–M7 已完成并归档；M7 最终验收/归档：2026-09-22（Asia/Shanghai）。当前无 `in_progress` 里程碑，M8 保持 `pending`。
-- 真实 provider/tool 的异步中断、超时和取消传播仍属于 M8，不能从 M5 的同步消费侧取消推断已经完成。
+- M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）按用户指示归档：代码与离线门禁完成，全仓 403 passed、4 个 live gate 预期 skip；一次真实普通回复由用户报告通过。真实 streaming、resume、summary 和 provider/tool 端到端接线仍未验收，见 [M8](docs/acceptance/M8.md) 与 [后续清单](docs/follow-ups/M1-M8.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
+- M5 同步取消与 M8 异步组件已分别验证；真实 provider/tool 的异步中断、超时和取消端到端传播仍是 M8 遗留项。
 
 | 文件 | 唯一职责 |
 |---|---|
@@ -12,6 +12,7 @@
 | PLAN.md | 当前状态、里程碑范围、验收要求、阶段接口 |
 | LEARNING_LOG.md | 学习者基础、按里程碑总结、关键决策、问题索引 |
 | docs/acceptance/Mx.md | 对应里程碑的验收命令、结果、局限和归档结论 |
+| docs/README.md | M1–M8 文档索引；审计、总结与后续任务入口 |
 | docs/history/ | 已封存的过程记录；不能作为当前任务清单 |
 
 状态取值为 `pending / in_progress / completed / blocked`；最多一个 `in_progress`，阶段间允许为零。归档只证明对应验收文件声明的范围，不能把教学范围扩张成生产能力。
@@ -26,7 +27,7 @@
 | M5 | 流式事件与 CLI 闭环 | completed | MVP | [M5](docs/acceptance/M5.md)，2026-09-21 遗留项闭合复验 |
 | M6 | 会话持久化、恢复与分支 | completed | MVP | [M6](docs/acceptance/M6.md)，2026-09-21 归档 |
 | M7 | 上下文装配与长对话压缩 | completed | 增强 | [M7](docs/acceptance/M7.md)，2026-09-22 最终验收与归档 |
-| M8 | 模型适配、重试、取消与容错 | pending | 增强 | 尚未启动 |
+| M8 | 模型适配、重试、取消与容错 | completed | 增强 | 2026-09-23 按用户指示归档已交付范围；保留真实服务与端到端接线验收缺口；[M8 归档](docs/acceptance/M8.md) |
 | M9 | 扩展、可观测性与评测 | pending | 生产化 | 尚未启动 |
 | M10 | 远程协议与客户端/服务端 | pending | 可选扩展 | 尚未启动 |
 | M11 | 全链路验收与架构复盘 | pending | 收束 | 尚未启动 |
@@ -57,13 +58,13 @@ Pi 是一组可组合包，而不只是 CLI：
 | `AgentState` / `AgentMessage` | `TypedDict`/Pydantic 边界模型 + LangChain messages + reducer |
 | `runLoop()` | `StateGraph` 的 model/tool 节点、条件边和 `Command` |
 | `AgentTool` + TypeBox | `@tool`/Pydantic 参数模型 + 自定义安全执行器 |
-| `AgentEvent` / streaming | 已实现同步 `stream()` 的 messages/updates/custom 投影；异步运行仍是后续工作 |
+| `AgentEvent` / streaming | 同步及异步事件投影组件已实现；真实 provider CLI 的端到端流仍待接线/验收 |
 | steer/follow-up | 应用层输入队列；图只消费已提交的下一批输入 |
 | JSONL session tree | LangGraph checkpointer + 独立 session 元数据仓储 |
 | branch/restore | `get_state_history()`、checkpoint config、`update_state()` |
-| compaction/transformContext | model 节点前的上下文策略节点，不修改完整审计记录 |
+| compaction/transformContext | 当前在 model 节点内派生临时上下文，不覆写持久历史；独立策略节点是可选后续设计 |
 | extension hooks | 图外 middleware/hook registry；需要路由时返回 `Command` |
-| pi-ai providers | `BaseChatModel` 适配器；不重写全部供应商 SDK |
+| pi-ai providers | 项目自有同步/异步模型协议与 compatible HTTP 适配；不重写全部供应商 SDK |
 | remote protocol/TUI | MVP 后独立适配层，不进入图的领域核心 |
 
 优先级：必须掌握状态/reducer、节点与路由、工具循环、streaming、checkpoint、错误与测试；需要理解上下文压缩、provider 边界、hooks、telemetry；暂时了解远程协议、TUI、模型评测；第一版忽略完整 provider/OAuth 目录、图像能力、二进制发布、全量 Pi 扩展兼容。
@@ -76,11 +77,11 @@ src/pi_agent/
   events/        # 稳定事件投影、序列化、终态过滤
   graph/         # graph builder、nodes、routing
   tools/         # registry、安全策略与 Coding Tools
-  models/        # BaseChatModel 适配器与 fake
+  models/        # 模型协议、compatible HTTP 适配与 fake
   sessions/      # checkpoint 与 session 元数据
   context/       # AGENTS/skills/prompt/compaction
   runtime/       # orchestration、hooks、取消、重试
-  telemetry/     # tracing contracts/adapters
+  telemetry/     # M9 目标，当前尚无此目录
   cli/           # 命令与渲染
 tests/           # 与 src 镜像
 docs/acceptance/ # 每个里程碑的验收记录
@@ -88,7 +89,7 @@ docs/acceptance/ # 每个里程碑的验收记录
 
 ## 5. 里程碑契约
 
-每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M8–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
+每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M9–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
 
 ### M0 — 源码分析与路线设计
 
@@ -159,10 +160,12 @@ M4 交付的是安全工具、文件审批和 prepare→approval→apply 集成�
 
 归档结果：M6.1–M6.7 已完成跨进程续聊、历史投影、受限状态 fork、应用 metadata、迁移恢复/并行写、损坏 SQLite 显式错误以及 `session list` CLI。fork 只复制选中状态且不执行节点；默认 fake 运行 CLI 仍不代表持久会话或 Coding Tools 已接通。完整证据与生产化局限见 [M6 归档](docs/acceptance/M6.md)。
 
+原验收标准中的“checkpoint 不重复执行已完成副作用”只在 fork 不调用图节点这一窄场景得到验证；任意崩溃重放下的文件/命令副作用幂等尚未验收，继续由 [F07](docs/follow-ups/M1-M8.md) 跟踪。
+
 ### M7 — 上下文装配与长对话压缩
 
 - **目标**：按确定顺序组合系统提示词、项目规则和历史，并在预算内运行。
-- **范围**：全局/祖先/当前目录 `AGENTS.md`、prompt template、token 估算、压缩阈值、摘要节点、保留最近 turn 与文件操作事实。
+- **范围**：全局/祖先/当前目录 `AGENTS.md`、prompt template、token 估算、压缩阈值、摘要阶段（原规划称“摘要节点”；实际嵌入 model 节点）、保留最近 turn 与文件操作事实。
 - **非目标**：兼容 Pi 的全部 skills/extensions 格式或精确 token 计费。
 - **交付物**：`context/`、上下文快照诊断、压缩与恢复测试。
 - **验收标准**：装配顺序可解释；摘要不删除持久化原记录；压缩失败不破坏会话；工具调用边界保持合法。
@@ -173,11 +176,22 @@ M4 交付的是安全工具、文件审批和 prepare→approval→apply 集成�
 ### M8 — 模型适配、重试、取消与容错
 
 - **目标**：把 graph runtime 与供应商、鉴权和瞬时故障解耦。
-- **范围**：`BaseChatModel` 工厂、OpenAI-compatible 首个适配器、环境变量配置、超时、指数退避、错误分类、用量、取消传播、fake/stub 合约测试。
+- **范围**：模型工厂（原规划称 `BaseChatModel` 工厂，实际使用项目模型协议）、OpenAI-compatible 首个适配器、环境变量配置、超时、指数退避、错误分类、用量、取消传播、fake/stub 合约测试。
 - **非目标**：重写 pi-ai 的完整 provider/OAuth/model catalog。
 - **交付物**：`models/`、配置模型、provider contract tests、可选 live smoke 文档。
 - **验收标准**：日志不含密钥；不可重试错误立即失败；重试有上限；取消传播到模型和工具。
 - **验证命令**：`uv run pytest tests/models tests/runtime -q`；`uv run ruff check .`；`uv run mypy src`。
+
+#### M8 交付与验收边界（已归档）
+
+M8.1–M8.9 的配置、模型适配、工具 schema、同步/异步重试策略、异步模型/上下文、流投影、用量、取消与进程组件、异步 SQLite、Provider 会话入口及离线测试均已交付。实现经过 2026-09-23 全仓验证和 2026-09-24 的离线复验。详细切片过程和历史判定保存在 [整理前快照](docs/history/2026-09-23-m1-m8-review/PLAN.md)，当前实际结果见 [M8 归档](docs/acceptance/M8.md)。
+
+已证实的断点：`run_provider_session()` 注入模型并使用 async minimal graph，尚未选择 async tool graph，也未接入只读注册表、schema、重试策略或 SSE 事件输出；`CompatibleHttpClient` 可解析工具响应，却没有发送 `tools` schema。异步进程在真实 POSIX 中缺少独立进程组 spawn，且正常结果将 returncode 固定为 0。这些问题列在 [后续任务](docs/follow-ups/M1-M8.md)，不能从组件级测试推断真实闭环完成。
+
+真实网络证据：用户此前报告普通回复 smoke `1 passed`；本轮本地离线复验未设置 `PI_AGENT_LIVE=1`，streaming、续聊和摘要的真实网络验收仍待执行。归档是已交付代码和离线范围的状态变更，未关闭原定真实联调与取消/超时端到端验收。
+
+验证入口：`uv run pytest -q -m 'not live' --basetemp=.pytest-tmp-doc-audit-20260923`；`uv run mypy src tests`；`uv run ruff check .`；`uv run ruff format --check .`。真实 smoke 命令和前置条件见 [README](README.md) 与 [M8 归档](docs/acceptance/M8.md)。
+
 
 ### M9 — 扩展、可观测性与评测
 
@@ -211,13 +225,15 @@ M4 交付的是安全工具、文件审批和 prepare→approval→apply 集成�
 - M3 定义工具循环；M4 定义文件/进程安全能力；M5 定义事件和 CLI 消费。组件分别通过测试不等于 CLI 已连通所有工具。
 - M4 的 InMemorySaver 只支持审批教学测试；M6 才负责持久化会话、跨进程恢复和分支。
 - M5 的 SIGINT/token 是同步消费侧协作取消，并已验证迭代器资源释放；M8 的 provider/tool 异步取消传播仍属于运行时能力。
-- M7 已归档；当前无进行中的里程碑。M8 尚未启动，真实 provider 联调按原计划在 M8 推进。
-- 每个里程碑坚持“整体请求 → 当前切片 → Pi 设计与 Python 映射 → 一个练习 → 回到整体”。学习者实现有价值的核心代码。
+- M7/M8 已归档；M8-R2-A 真实普通回复已通过一次，R2-D–R2-F 的真实 streaming/resume/summary smoke 与端到端接线仍待显式执行，继续记录在 M8 验收和后续清单中。
+- 每个里程碑坚持“整体请求 → 当前切片 → Pi 设计与 Python 映射 → 一个练习 → 回到整体”；学习者优先实现有价值的核心代码，明确委托助手代写的切片单独记录。
 - 修改范围或验收口径时保留原要求，明确已实现部分和未覆盖部分；不可通过搬移文档隐去缺口。
 - 里程碑编号 M0–M11 固定。M5 内的十一道练习属于子切片，不是十一项新里程碑。
 - PLAN 不再追加每轮测试流水；最新快照更新原段落，详细证据放到对应验收文件。历史“下一步”和预期红灯仅保存在历史快照。
 
 ## 7. 本次复验与记录维护
+
+2026-09-23 M8 归档前复验：全仓 pytest `403 passed, 4 skipped`，4 项均为未启用 `PI_AGENT_LIVE=1` 的预期 live gate；mypy 检查 179 个源文件；Ruff lint 与 200 个文件格式检查通过；fake JSONL CLI 与 context inspect smoke 退出码均为 0。真实普通回复已有一次用户执行的 1 passed 证据，新增 streaming/resume/summary live smoke 尚未执行。2026-09-24 文档审计复验：离线 `403 passed, 4 deselected`，mypy/Ruff/format 通过；见 [审计](docs/reviews/M1-M8-audit.md)。
 
 2026-09-22 M7 归档复验：全仓 pytest `217 passed`；M7 原计划范围 `56 passed`；mypy 108 个文件；Ruff lint 与 124 个文件格式检查通过；context inspect 与 fake JSONL CLI smoke 退出码均为 0。原始文档保留在 [M7 归档前快照](docs/history/2026-09-22-before-m7-archive/README.md)。
 
