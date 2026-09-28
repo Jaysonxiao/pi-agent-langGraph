@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A teaching-focused Python reconstruction of Pi Agent using LangGraph."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
-scripts = { pi-agent = "pi_agent.cli.app:main" }
+scripts = { pi-agent = "pi_agent.cli.app:main", pi-agent-server = "pi_agent.server.app:main", pi-agent-client = "pi_agent.client.app:main" }
 dependencies = [
     "httpx>=0.28,<1",
     "langchain-core>=1.2,<2",

@@ -94,3 +94,28 @@ show ID --database DB`, then use the interactive `command approve` or `command
 reject` subcommand. A consumed proposal is never automatically replayed after
 a crash. The provider CLI emits completed messages and graph events; token-by-token
 terminal rendering is not yet a guarantee.
+
+## M10 local remote-session entry points
+
+M10 adds loopback-only authenticated server and client commands. The server owns
+the workspace, provider configuration, and SQLite database; clients send only
+session commands. Set `PI_AGENT_REMOTE_TOKEN` in the environment for both
+processes. The token is required and is never accepted as a command-line option.
+
+```powershell
+$env:PI_AGENT_REMOTE_TOKEN = "use-a-long-random-local-token"
+uv run pi-agent-server --provider fake --workspace .\safe-workspace --database .\sessions.sqlite --port 8765
+```
+
+In another terminal with the same token, create a session and send one prompt:
+
+```powershell
+uv run pi-agent-client --port 8765 create
+uv run pi-agent-client --port 8765 prompt --session-id SESSION_ID --text "Read probe.txt and summarize it"
+uv run pi-agent-client --port 8765 snapshot --session-id SESSION_ID
+```
+
+The client writes one JSON snapshot per command. The default server provider is
+fake and deterministic; choose `--provider compatible` only when provider
+configuration is explicitly set. Both entry points bind/connect only to
+`127.0.0.1`; this milestone does not claim external-network deployment safety.

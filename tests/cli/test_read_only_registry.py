@@ -5,7 +5,10 @@ from pathlib import Path
 
 from langchain_core.messages import ToolCall
 
-from pi_agent.cli.read_only import create_cli_read_only_registry
+from pi_agent.cli.read_only import (
+    create_cli_async_read_only_registry,
+    create_cli_read_only_registry,
+)
 
 
 def test_cli_registry_contains_only_read_only_tools(tmp_path: Path) -> None:
@@ -15,6 +18,23 @@ def test_cli_registry_contains_only_read_only_tools(tmp_path: Path) -> None:
     registry = create_cli_read_only_registry(workspace)
 
     assert [tool.name for tool in registry.tools] == ["read", "list", "search"]
+
+
+def test_cli_async_registry_registers_command_proposal_once_when_enabled(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    registry, definitions = create_cli_async_read_only_registry(
+        workspace,
+        database=tmp_path / "sessions.sqlite",
+        session_id="session-1",
+        allowed_executables=frozenset({"python"}),
+    )
+
+    assert [tool.name for tool in definitions] == ["read", "list", "search", "propose_command"]
+    assert registry.find("propose_command") is not None
 
 
 def test_cli_registry_executes_read_list_and_search_in_workspace(tmp_path: Path) -> None:

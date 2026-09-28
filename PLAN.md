@@ -5,6 +5,7 @@
 - 初始规划：2026-09-02；M5 初次归档：2026-09-18；M5 遗留项复验、M6 实现与归档：2026-09-21（Asia/Shanghai）。
 - M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）首次归档；2026-09-24 补齐真实 Provider CLI 只读闭环、重试/时限、命令人审入口，并在配置的 compatible 服务完成 4 个 live smoke 与合成文件 CLI 工具调用。初次归档与后续复验分列于 [M8](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
 - M9 于 2026-09-24 启动、完成已交付范围并归档。用户报告最终组合测试 **28 passed**、mypy **203 source files**、Ruff lint/format 与 fake eval CLI 通过；默认 CLI telemetry、带工具调用的 CLI eval 和可选 live eval 的边界见 [M9 归档](docs/acceptance/M9.md)。
+- M10 于 2026-09-24 按用户要求启动；2026-09-28 完成全部切片和归档复验，并按用户本轮授权归档已交付的离线本机范围。验收证据、非目标和未关闭边界见 [M10 归档](docs/acceptance/M10.md)。
 - M5 同步取消与 M8 异步组件、主请求取消接线已分别验证；真实传输中取消、429 故障注入和跨平台进程树仍按 [剩余清单](docs/follow-ups/M1-M8.md) 单列，不扩大现有 smoke 结论。
 
 | 文件 | 唯一职责 |
@@ -13,7 +14,7 @@
 | PLAN.md | 当前状态、里程碑范围、验收要求、阶段接口 |
 | LEARNING_LOG.md | 学习者基础、按里程碑总结、关键决策、问题索引 |
 | docs/acceptance/Mx.md | 对应里程碑的验收命令、结果、局限和归档结论 |
-| docs/README.md | M1–M9 文档索引；审计、总结与后续任务入口 |
+| docs/README.md | M1–M10 文档索引；审计、总结与后续任务入口 |
 | docs/history/ | 已封存的过程记录；不能作为当前任务清单 |
 
 状态取值为 `pending / in_progress / completed / blocked`；最多一个 `in_progress`，阶段间允许为零。归档只证明对应验收文件声明的范围，不能把教学范围扩张成生产能力。
@@ -30,7 +31,7 @@
 | M7 | 上下文装配与长对话压缩 | completed | 增强 | [M7](docs/acceptance/M7.md)，2026-09-22 最终验收与归档 |
 | M8 | 模型适配、重试、取消与容错 | completed | 增强 | 2026-09-23 首次归档；2026-09-24 接线纠正与真实 provider 复验；[M8 归档](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md) |
 | M9 | 扩展、可观测性与评测 | completed | 生产化 | [M9 归档](docs/acceptance/M9.md)，2026-09-24 已交付离线范围验收；未关闭边界保留 |
-| M10 | 远程协议与客户端/服务端 | pending | 可选扩展 | 尚未启动 |
+| M10 | 远程协议与客户端/服务端 | completed | 已选择的可选扩展 | [M10 归档](docs/acceptance/M10.md)，2026-09-28 离线本机范围验收；[设计](docs/design/M10.md) |
 | M11 | 全链路验收与架构复盘 | pending | 收束 | 尚未启动 |
 
 日期规则：实现/学习日期、验收日期、归档日期、复验日期分别记录；历史测试数只代表对应阶段。未经核对的具体时间不补写。M5 子练习统一归入 M5，不再追加在 M4 标题下。
@@ -86,13 +87,16 @@ src/pi_agent/
   telemetry/     # M9 后端无关 spans、metrics/log ports 与 lifecycle adapter
   evals/         # M9 fake suite/case/judge 与稳定 JSON report
   cli/           # 命令与渲染
+  protocol/      # M10 计划新增：帧、版本化 DTO、严格编解码
+  server/        # M10 计划新增：认证、会话协调、请求派发、TCP 入口
+  client/        # M10 计划新增：连接、请求关联、快照缓存
 tests/           # 与 src 镜像
 docs/acceptance/ # 每个里程碑的验收记录
 ```
 
 ## 5. 里程碑契约
 
-每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M10–M11 命令为未来验收目标，其中尚未创建的目录或入口不能当作现在可执行的命令。
+每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M10 已启动规划，M10–M11 尚未创建的目录或入口对应命令仍为未来验收目标，不能当作已经执行或通过。
 
 ### M0 — 源码分析与路线设计
 
@@ -216,6 +220,140 @@ M9.1–M9.6 已交付观察型 hook、Provider/model/tool 生命周期、脱敏 
 - **验收标准**：畸形/超大帧被拒绝；断线状态明确；并发请求可关联；服务端快照是唯一权威状态。
 - **验证命令**：`uv run pytest tests/protocol tests/server tests/client -q`；`uv run pi-agent-server --help`。
 
+#### M10 执行边界与分片顺序
+
+以下逐片实际结果保留各片完成当时的状态；M10 当前归档结论以 [验收记录](docs/acceptance/M10.md) 和本页里程碑总表为准。
+
+贯穿场景：客户端认证并建立协议连接 → 创建会话 S → 提交“请读取 probe.txt 并总结” → 服务端进入已有 async tool graph → 客户端看到带请求/run 标识的事件与最终快照 → 客户端重连，读取 S 的服务端快照并续聊。失败变式贯穿各片：报文被拆开、未认证、同会话并发、回复前断线、取消和服务端重启。
+
+首版采用单服务进程、单信任主体、服务端固定 workspace/database/model 的本机 TCP；四字节大端长度前缀加 UTF-8 JSON。认证在协议核心之前完成；协议 v1 只公开 `create_session / get_snapshot / prompt / cancel`。远程会话仅注册 read/list/search，命令提案与审批、文件写入、多租户、公网/TLS 部署、自动重放、后台脱离连接运行、Pi CBOR 字节兼容均不在 M10 内。具体限制与失败语义见 [设计决策](docs/design/M10.md#c-首版契约与边界)。
+
+分片制定时先只落地计划。随后每片先讲全链路和 Pi 对应设计，再提供脚手架、测试和一个学习者核心 TODO；审查通过后回到同一请求链路。下表保留分片依据与最终状态，不表示曾同时布置八项作业。
+
+| 切片 | 解决的链路断点 | 依赖 | 状态 | 学习者核心点 |
+|---|---|---|---|---|
+| M10.1 | 字节流无法确定消息边界 | 无 | completed | `FrameDecoder.feed()` 与 24 项聚焦测试通过 |
+| M10.2 | 完整 payload 尚不可信 | M10.1 | completed | 学习者实现 `decode_client_message()`；62 项 protocol 测试与静态门禁通过 |
+| M10.3 | 未认证连接可能进入业务 | M10.2 | completed | 认证 gate 与 asyncio transport 全部验证通过 |
+| M10.4 | 会话装配仍依赖 CLI | M10.2 | completed | 71 项切片/回归测试与静态门禁通过 |
+| M10.5 | 并发与取消缺少单一所有者 | M10.4 | completed | 7 项聚焦测试与统一静态门禁通过 |
+| M10.6 | 连接尚未接入会话操作 | M10.3、M10.5 | completed | 学习者完成 `dispatch_message()` 路由；104 项协议/服务端测试与静态门禁通过 |
+| M10.7 | 客户端无法可靠关联响应/状态 | M10.6 | completed | pending response 按 request ID/command 恰好一次结算；客户端权威快照/断连语义通过验证 |
+| M10.8 | 组件尚未形成公开可运行入口 | M10.7 | completed | server/client 公开入口、transport conformance、合成工具/SQLite 子进程 smoke、四命令 client CLI 分派通过；已纳入 M10 归档 |
+
+##### M10.1 — 有界增量帧解码
+
+- **目标**：把任意拆分/合并的网络字节块还原为完整 payload。
+- **范围**：新增 `src/pi_agent/protocol/framing.py`、`errors.py`、`__init__.py` 和 `tests/protocol/test_framing.py`；实现四字节长度、上限、EOF 与失败终态。
+- **非目标**：JSON、认证、socket、模型或数据库调用。
+- **交付物**：长度前缀编码器、增量解码器、结束/失败清理和契约测试；完整设计与实现复盘见 [首片记录](docs/design/M10.md#d-首片练习与实现复盘)。
+- **验收标准**：拆头/拆正文、逐字节输入、粘包、恰好上限均正确；零长度/超限在完整头部到达时立即拒绝；截断 EOF 报错；失败后不继续解码；只缓存尚未完成的一帧。
+- **验证命令**：`uv run pytest tests/protocol/test_framing.py -q --basetemp=.pytest-tmp-m101`；本节末尾统一静态门禁。
+
+##### M10.2 — 版本化 DTO 与严格 codec
+
+- **目标**：完整字节 payload 通过校验后才成为业务请求。
+- **范围**：新增 `protocol/messages.py`、`codec.py`；扩展 `protocol/errors.py`；新增 `tests/protocol/test_messages.py`、`test_codec.py`。定义 hello、request、response、event、snapshot 与四个命令。
+- **非目标**：接受任意对象字段、复用 LangGraph StateSnapshot 作为 wire DTO、Pi 的完整命令集合。
+- **交付物**：严格 Pydantic DTO、入站/出站编码、稳定安全错误；学习者只实现 `decode_client_message(payload: bytes) -> ClientMessage`，其余 DTO、严格 JSON 载入和服务端解析由脚手架提供。完整调用链、输入样例和测试意图见 [M10.2 练习](docs/design/M10.md#e-m102-切片与练习复盘)。
+- **验收标准**：非法 UTF-8/JSON、重复 JSON key、非有限数、额外字段、错误类型/方向均拒绝；版本不能从字符串或 bool 强转；未知整数版本可解析为 hello 再由握手报告 `unsupported_version`；出站同样受限；错误不回显原文或校验异常详情。
+- **验证命令**：`uv run pytest tests/protocol -q --basetemp=.pytest-tmp-m102`；统一静态门禁。
+
+实际结果（2026-09-24，completed）：学习者完成 `decode_client_message()`，按先安全 JSON loader、后 client 专用严格 TypeAdapter 的顺序校验；未知非负整数版本留待握手判断，客户端方向错误和额外字段由 DTO 拒绝，错误保持固定安全文案。`uv run pytest tests/protocol -q --basetemp=.pytest-tmp-m102` 为 **62 passed**；`uv run mypy src tests` 检查 211 个文件通过；`uv run ruff check .` 通过；`uv run ruff format --check .` 检查 252 个文件通过。此前 50 passed/12 TODO failures 是练习脚手架阶段结果，已由此次全绿复验取代。贯穿请求现在从 M10.1 完整帧进入可信 client DTO；认证和派发仍未发生。
+
+##### M10.3 — 认证前置的字节连接
+
+- **目标**：让协议核心只接收到已认证、有序、有界的连接。
+- **范围**：新增 `protocol/transport.py`、`server/auth.py`、`server/transports/tcp.py`、`client/transport.py`；新增 `tests/server/test_auth.py`、`test_tcp_transport.py`、`tests/client/test_transport.py`。
+- **非目标**：公网监听、TLS/OAuth 平台、多用户授权、把鉴权 token 塞入 AgentState。
+- **交付物**：AsyncByteConnection 端口、asyncio TCP 适配、独立认证前导帧、单 reader/串行 writer、发送与关闭时限；学习者实现认证 gate，业务 accept 回调由助手脚手架注入。完整链路和练习见 [M10.3 说明](docs/design/M10.md#g-m103-当前切片与学习者练习)。
+- **验收标准**：缺失/错误凭据、认证超时、超限 auth 帧均使业务调用次数为零；认证与 hello 同包也不丢后续字节；并行写无帧交错；慢读端在预算内关闭；重复关闭安全；默认与显式非法监听地址均受限制。
+- **验证命令**：`uv run pytest tests/server/test_auth.py tests/server/test_tcp_transport.py tests/client/test_transport.py -q --basetemp=.pytest-tmp-m103`；统一静态门禁。
+
+实际结果（2026-09-24，completed）：学习者实现 `authenticate_connection()`，在单一 deadline 内以 `readexactly()` 读取有界认证前导，并以常量时间比较 token；完整切片命令 **16 passed**，mypy 检查 **221 source files** 通过，Ruff lint 通过，format 检查 **262 files** 通过。此前 Ruff 报告的全角标点问题已修复并重跑。用户报告的 `tests/server` 子集为 14 passed；切片完整 client/server transport 测试另为 16 passed。认证和 hello 同批到达仍保留在同一个 reader 缓冲中；M10.3 完成后请求只到认证 byte connection，尚无握手派发。
+
+##### M10.4 — 可复用的会话运行边界与快照
+
+- **目标**：同一 async graph/session 能由 CLI 和服务端调用，服务端输出框架无关快照。
+- **范围**：新增 `runtime/session.py`、`runtime/read_only.py`、`server/runtime.py`、`server/snapshots.py`；把 `cli/runtime.py`、`cli/read_only.py` 的公共装配/过滤移到上述运行边界并保留 CLI 薄包装；必要时给 `sessions/async_runtime.py` 增加读取接口。新增 `tests/server/test_runtime.py`、`test_snapshots.py`。
+- **非目标**：改写 model/tools 图算法、改变既有 CLI 行为、让 client 选择服务端路径/凭据、远程副作用工具。
+- **交付物**：非 CLI options 的运行配置、注入 model/hooks/run_id/cancellation 的接口、checkpoint 读取与安全事件/快照投影；学习者完成 `project_session_snapshot(...) -> SessionSnapshot` 的状态/消息白名单映射。
+- **验收标准**：fake 模型完成真实临时文件 read → ToolMessage → 回复；SQLite 重开能读同一会话；敏感路径过滤和 M9 hook 关联保留；原始 checkpoint/config/provider metadata 不出网；长历史按展示预算显式截断；部分 checkpoint 不伪装完成；server 不导入 `pi_agent.cli`。
+- **验证命令**：`uv run pytest tests/server/test_runtime.py tests/server/test_snapshots.py tests/cli tests/sessions tests/integration/test_provider_lifecycle.py tests/integration/test_telemetry_lifecycle.py -q --basetemp=.pytest-tmp-m104`；统一静态门禁。
+
+##### M10.5 — 会话并发、运行所有权与取消
+
+- **目标**：为每个运行确定领取者、取消者和最终清理责任。
+- **范围**：新增 `server/sessions.py`，必要时扩展 `server/runtime.py`；新增 `tests/server/test_sessions.py`、`test_cancellation.py`。本片由 coordinator 维护 active run，并将同 session 并发限制为 1，不写入图业务状态。server epoch/revision 字段由 M10.4 runtime/snapshot 边界承载；全局连接数、活动 run 和在途请求上限由 M10.6 dispatcher/connection 执行（见资源预算表）。
+- **非目标**：分布式租约、跨进程 exactly-once、取消后自动恢复未完成工具批次、无限队列。
+- **交付物**：按 session 原子领取、冲突立即 `busy`、不同会话可并发、精确 run_id 取消与 join、断线取消所有者的运行；学习者实现 `try_claim_run(...) -> RunLease` 的领取/冲突契约。
+- **验收标准**：同 S 两个 prompt 仅一个调用模型；不同 S 不互相串状态；旧 run_id 不能取消新 run；cancel 不等待 prompt 完成才被派发；清理后才能释放 busy；清理超时保持不可重用；重启遇到 pending checkpoint 返回 `needs_recovery`，不自动重放。
+- **验证命令**：`uv run pytest tests/server/test_sessions.py tests/server/test_cancellation.py -q --basetemp=.pytest-tmp-m105`；统一静态门禁。
+
+##### M10.6 — 服务端协议派发
+
+- **目标**：连通已认证连接、版本握手、四个命令和已有会话运行器。
+- **范围**：新增 `server/connection.py`、`server/dispatcher.py`；新增 `tests/server/test_dispatcher.py`、`test_protocol.py`。分离接收循环与运行 task，统一 response/event writer。
+- **非目标**：新增业务图节点、广播订阅体系、自动重试 prompt、完整 Pi attach/steer/lease API。
+- **交付物**：`awaiting_hello → ready → closing → closed` 状态机、request ID/command 回填、事件关联和错误映射；学习者实现 `dispatch_message(...)` 的状态门禁与路由。
+- **验收标准**：握手前业务、重复 hello、未知版本、重复请求 ID、超并发均拒绝；两个请求可乱序完成但 ID 不串；prompt 只有一个最终 response，事件不重复终态；连接关闭后禁止发送/启动任务；模型失败和协议错误可区分。
+- **验证命令**：`uv run pytest tests/protocol tests/server -q --basetemp=.pytest-tmp-m106`；统一静态门禁。
+
+M10.6 实际结果（completed，2026-09-28，等待用户验收）：学习者实现 `ServerDispatcher.dispatch_message()`，把四种命令路由至 `ServerCommandService`，保持 request ID/command 关联，转发 prompt 的 `run_started` 事件，并将已知安全错误和意外错误映射为不泄漏内部细节的 response。代码审查发现断开清理期间可能有第二个在途 prompt 在 owned-run 快照后才注册；连接进入 closing 后，event callback 现以取消拒绝继续启动该运行，并以竞态测试覆盖。最终计划命令 `uv run pytest tests/protocol tests/server -q --basetemp=.pytest-tmp-m106` **104 passed**；`uv run mypy src tests` 检查 **234 source files** 通过；`uv run ruff check .` 通过；`uv run ruff format --check .` 检查 **275 files** 通过。结果证明协议/服务端切片，不代表 M10 客户端、公开入口或端到端验收已经完成。用户随后授权进入 M10.7。
+
+##### M10.7 — 最小客户端与权威快照
+
+- **目标**：客户端可靠完成请求、展示进展，并在断线/重连时承认结果未知。
+- **范围**：新增 `client/connection.py`、`client/client.py`、`client/state.py`、`client/errors.py`；新增 `tests/client/test_connection.py`、`test_requests.py`、`test_state.py`。
+- **非目标**：客户端自行拼接权威 transcript、自动重放请求、用最后一个 token 判定成功、共享/exclusive lease 全量兼容。
+- **交付物**：一个接收循环、pending future 表、请求 deadline、四个 public async 方法、快照缓存；学习者实现 `resolve_response(...)`，按 ID/command 对 pending future 完成一次。
+- **验收标准**：乱序响应正确分发；未知/重复响应和 command 不匹配显式失败；断线清空 pending 并标记旧快照 stale；请求超时关闭连接并让未完成请求报告结果未知；重连更换 connection epoch，忽略旧连接事件；新 server epoch 重置 revision 比较；同 epoch 旧快照不能覆盖新快照。
+- **验证命令**：`uv run pytest tests/client -q --basetemp=.pytest-tmp-m107`；统一静态门禁。
+
+M10.7 实际结果（completed，2026-09-28，等待用户验收）：学习者实现 `RemoteClient.resolve_response(response, *, connection_generation)`，旧连接代次响应被忽略；pending 依 request ID 恰好取出并核对 command；未知/重复 ID 和 command mismatch 使当前连接以协议错误关闭；安全服务端错误映射为 `ServerRejectedError`；成功响应应用权威快照并完成 Future。用户执行 `uv run pytest tests/client -q --basetemp=.pytest-tmp-m107-final` **17 passed**；复核 `uv run pytest tests/client -q --basetemp=.pytest-tmp-m107-review` **17 passed**；`uv run pytest tests/protocol -q --basetemp=.pytest-tmp-m107-review-protocol` **63 passed**；`uv run mypy src tests` **241 source files** 通过；`uv run ruff check .`、`uv run ruff format --check .`（282 files）和 `git diff --check` 通过。M10.2 的 strict tuple DTO 与 JSON array round-trip 边界已在 validator 做 list→tuple 归一化并由协议回归覆盖。本结果证明 client/protocol 切片，不代表 M10 公开入口、真实 TCP 组合或跨进程 exactly-once 已验收；下一片 M10.8 尚未启动。
+
+##### M10.8 — 公开入口与组合验收
+
+- **目标**：从公开入口证明“认证 → 请求 → 工具 → 持久化 → 客户端 → 重连”的完整链路。
+- **范围**：新增 `server/app.py`、`client/app.py`、`tests/server/test_app.py`、`tests/client/test_app.py`、`tests/server/test_conformance.py`、`tests/server/test_subprocess_smoke.py`；修改 `pyproject.toml` 注册 `pi-agent-server` 与 `pi-agent-client`，更新 `README.md`、`.env.example` 配置名、`docs/README.md`；创建 `docs/acceptance/M10.md`。
+- **非目标**：真实模型质量验收、外网部署、替 M8/M9 关闭原有遗留项、进入 M11。
+- **交付物**：默认 fake、显式 compatible 的 server；最小 create/snapshot/prompt/cancel client CLI；内存 transport 与本机 TCP 共用 conformance 案例；fake 工具场景 fixture 与独立子进程 smoke；验收记录。
+- **验收标准**：合成 workspace 中完成 read/续聊；服务端重启后同 session 可查且已完成轮次不重跑；运行中断线、cancel/完成竞态、错误 token/版本/帧、同 session 并发、慢消费者和停机都闭合；日志无密钥/正文；原有 CLI/hook 回归通过。server shutdown 必须退出，残留 task/资源算失败。
+- **验证命令**：执行下面的最终门禁；记录退出码与实际结果；失败先修复，不把 localhost socket、子进程或关键失败用例设为 skip。
+
+M10.8 实际结果（completed，2026-09-28）：学习者完成 `client/app.py::dispatch_command()`，将 create/snapshot/prompt/cancel 映射到 M10.7 的 `RemoteClient` API。归档审查补齐完成/取消竞态、服务端进程日志的 token/正文断言，以及 TCP listener/handler 关闭超时不能静默成功的契约。最终 M10 组合 **133 passed**、全仓非 live 回归 **565 passed、4 deselected**；`uv sync --all-extras`、server/client help、mypy（247 source files）、Ruff lint、format（289 files）、fake JSONL CLI、fake eval smoke 和 `git diff --check` 均通过。pytest cache 有权限警告，不影响测试；4 deselected 为 live 标记范围。完整命令、验收映射和归档边界见 [M10 归档](docs/acceptance/M10.md)。
+
+每片统一静态门禁（实现后执行，uv 命令顺序运行）：
+
+```powershell
+uv run mypy src tests
+uv run ruff check .
+uv run ruff format --check .
+```
+
+M10 最终门禁保留原计划两条命令，并增加完整回归与公开入口 smoke：
+
+```powershell
+uv sync --all-extras
+uv run pytest tests/protocol tests/server tests/client -q
+uv run pi-agent-server --help
+uv run pi-agent-client --help
+uv run mypy src tests
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest -q -m "not live" --basetemp=.pytest-tmp-m10-regression
+uv run pi-agent --provider fake --prompt hello --events jsonl
+uv run pi-agent eval --suite smoke --provider fake
+```
+
+子进程 smoke 放在原计划测试目录内，由 `test_subprocess_smoke.py` 自动选择空闲端口、创建合成临时工作区/数据库、通过环境注入合成 token、启动两个真实入口并在 finally 关闭进程；不靠手工启动后遗留服务。真实 compatible 服务仅在明确启用时做补充验证，不作为 M10 离线可复现验收的替代。
+
+阶段计划依据：固定提交源码和本地接口核对形成 M10.1–M10.8 分片，各片计划验证已完成。用户于 2026-09-28 授权在满足条件时立即归档；归档审查和复验通过后，M10 已交付离线本机范围归档。M11 仍为 pending，不自动启动。
+
+M10.4 于 2026-09-28 完成。共享 async session runtime、只读工具装配和 allowlist snapshot projection 已实现；检查发现 CLI 命令提案分支重复注册 `propose_command`，已修复并增加回归测试。完整验证命令 `uv run pytest tests/server/test_runtime.py tests/server/test_snapshots.py tests/cli tests/sessions tests/integration/test_provider_lifecycle.py tests/integration/test_telemetry_lifecycle.py -q --basetemp=.pytest-tmp-m104` **71 passed**；`uv run mypy src tests` 检查 **227 source files** 通过；`uv run ruff check .` 通过；`uv run ruff format --check .` 检查 **268 files** 通过。另增加 server runtime hook thread/run correlation 断言。server/runtime 没有 `pi_agent.cli` import；快照只投影允许字段并执行 per-message/overall 预算。
+
+M10.5 于 2026-09-28 完成。学习者实现 `SessionCoordinator.try_claim_run()` 后，计划命令 `uv run pytest tests/server/test_sessions.py tests/server/test_cancellation.py -q --basetemp=.pytest-tmp-m105` **7 passed**；`uv run mypy src tests` 检查 **230 source files** 通过；`uv run ruff check .` 通过；`uv run ruff format --check .` 检查 **271 files** 通过。首次复验发现实现注释中的全角标点和格式问题，修复后四项计划验证重跑全绿。用户另报告 `uv run pytest tests/server -q --basetemp=.pytest-tmp-m102` **26 passed**。同 session 冲突、独立 session、完成后释放、精确 run_id 取消/join、清理超时期间保持 busy 和 pending checkpoint 恢复均由测试覆盖。M10.6 进度见下节。
+
 ### M11 — 全链路验收与架构复盘
 
 - **目标**：交付可运行、可测试、可扩展的 Python Agent，并完成“从点回到面”。
@@ -251,7 +389,7 @@ uv run pytest -q --basetemp=.pytest-tmp
 uv run mypy src tests
 uv run ruff check .
 uv run ruff format --check .
-$milestoneCount = (Select-String -Path PLAN.md -Pattern '\|\s+in_progress\s+\|').Count
+$milestoneCount = (Select-String -Path PLAN.md -Pattern '^\|\s+M\d+\s+\|.*\|\s+in_progress\s+\|').Count
 if ($milestoneCount -gt 1) { throw "More than one milestone is in_progress" }
 ```
 
