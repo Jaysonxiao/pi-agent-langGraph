@@ -2,6 +2,7 @@
 
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 
 from pi_agent.sessions import SqliteSessionCatalog
@@ -10,7 +11,7 @@ from pi_agent.sessions.metadata import METADATA_SCHEMA_VERSION
 
 def test_catalog_recovers_when_table_exists_before_migration_marker(tmp_path: Path) -> None:
     database_path = tmp_path / "checkpoints.sqlite"
-    with sqlite3.connect(database_path) as connection:
+    with closing(sqlite3.connect(database_path)) as connection, connection:
         connection.execute(
             """
             CREATE TABLE pi_agent_schema_migrations (
@@ -31,7 +32,7 @@ def test_catalog_recovers_when_table_exists_before_migration_marker(tmp_path: Pa
 
     assert SqliteSessionCatalog(database_path).list_sessions() == []
 
-    with sqlite3.connect(database_path) as connection:
+    with closing(sqlite3.connect(database_path)) as connection, connection:
         applied_versions = connection.execute(
             "SELECT version FROM pi_agent_schema_migrations"
         ).fetchall()

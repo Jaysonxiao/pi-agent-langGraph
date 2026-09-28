@@ -18,12 +18,14 @@ from pi_agent.cli.read_only import CliWorkspacePathPolicy
 from pi_agent.cli.render import render_event
 from pi_agent.cli.runtime import stream_provider_session
 from pi_agent.cli.signals import sigint_cancels
+from pi_agent.cli.telemetry import CliTelemetryHook
 from pi_agent.closing import close_iterator
 from pi_agent.domain import create_initial_state
 from pi_agent.events import iter_jsonl, iter_terminal_once, project_stream_chunks
 from pi_agent.events.stream import StreamEvent
 from pi_agent.events.terminal import run_outcome
 from pi_agent.events.trace import sanitized_trace
+from pi_agent.extensions import HookRegistry
 from pi_agent.graph import RunContext, build_minimal_graph
 from pi_agent.models import FakeChatModel
 from pi_agent.models.async_adapter import CompatibleAsyncChatModel
@@ -31,6 +33,7 @@ from pi_agent.models.config import ModelOptions, resolve_model_config
 from pi_agent.models.http_client import build_async_provider_client
 from pi_agent.runtime.policy import RetryPolicy
 from pi_agent.sessions import SqliteSessionCatalog
+from pi_agent.telemetry.jsonl import JsonlTelemetrySink
 
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
@@ -51,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url")
     parser.add_argument("--allow-executable", action="append", default=[])
     parser.add_argument("--trace-file", type=Path)
+    parser.add_argument(
+        "--telemetry-file",
+        type=Path,
+        help="append content-free lifecycle spans, metrics, and logs (compatible provider only)",
+    )
     commands = parser.add_subparsers(dest="command")
     add_context_parser(commands)
     add_command_parser(commands)
@@ -111,8 +119,6 @@ async def _run_compatible_cli(args: argparse.Namespace, output: TextIO) -> int:
         ModelOptions(provider="compatible", model=args.model, base_url=args.base_url),
         os.environ,
     )
-    client = build_async_provider_client(configuration)
-    model = CompatibleAsyncChatModel(client)
     options = ProviderCliOptions(
         provider="compatible",
         prompt=args.prompt,
@@ -121,6 +127,17 @@ async def _run_compatible_cli(args: argparse.Namespace, output: TextIO) -> int:
         session_id=args.session_id,
         workspace=args.workspace,
     )
+    telemetry_target: Path | None = None
+    if args.telemetry_file is not None:
+        telemetry_target = CliWorkspacePathPolicy(args.workspace).resolve(
+            str(args.telemetry_file), must_exist=False
+        )
+        if not telemetry_target.parent.is_dir() or (
+            telemetry_target.exists() and not telemetry_target.is_file()
+        ):
+            raise ValueError(
+                "Telemetry destination must be a workspace file in an existing directory."
+            )
     trace_target: Path | None = None
     if args.trace_file is not None:
         trace_target = CliWorkspacePathPolicy(args.workspace).resolve(
@@ -130,6 +147,13 @@ async def _run_compatible_cli(args: argparse.Namespace, output: TextIO) -> int:
             trace_target.exists() and not trace_target.is_file()
         ):
             raise ValueError("Trace destination must be a workspace file in an existing directory.")
+    client = build_async_provider_client(configuration)
+    model = CompatibleAsyncChatModel(client)
+    hooks: HookRegistry | None = None
+    if telemetry_target is not None:
+        hooks = HookRegistry()
+        telemetry_hook = CliTelemetryHook(JsonlTelemetrySink(telemetry_target))
+        hooks.register("cli-telemetry", telemetry_hook.handle)
     outcome: str | None = None
     try:
         async with asyncio.timeout(configuration.run_timeout_seconds):
@@ -143,6 +167,7 @@ async def _run_compatible_cli(args: argparse.Namespace, output: TextIO) -> int:
                 ),
                 request_timeout_seconds=configuration.timeout_seconds,
                 allowed_executables=frozenset(args.allow_executable),
+                hooks=hooks,
             ):
                 current = run_outcome(event)
                 if current is not None:

@@ -9,9 +9,10 @@ permissions:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12"]
 
     steps:
@@ -37,3 +38,9 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+      - name: Public CLI smoke
+        run: uv run pi-agent --provider fake --prompt "inspect this workspace"
+
+      - name: Tool evaluation smoke
+        run: uv run pi-agent eval --suite tools --provider fake

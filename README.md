@@ -1,6 +1,6 @@
 # Pi Agent LangGraph
 
-This repository is a teaching-focused Python reconstruction of Pi Agent's core behavior using LangGraph. Development proceeds one independently testable milestone at a time; see [PLAN.md](PLAN.md) for scope and acceptance criteria. For the M1–M8 document map, stage summaries, audit and prioritized follow-ups, see [docs/README.md](docs/README.md).
+This repository is a teaching-focused Python reconstruction of Pi Agent's core behavior using LangGraph. Development proceeds one independently testable milestone at a time; see [PLAN.md](PLAN.md) for scope and acceptance criteria. For the milestone document map, stage summaries, audit and prioritized follow-ups, see [docs/README.md](docs/README.md).
 
 ## Development
 
@@ -14,7 +14,7 @@ uv run mypy src tests
 uv run pytest
 ```
 
-M0–M8 have archived deliveries. The default fake run CLI remains deterministic and non-persistent:
+M0–M10 have archived deliveries within their documented scope. M11 is in progress. The default fake run CLI remains deterministic and non-persistent:
 
 ```powershell
 uv run pi-agent --provider fake --prompt hello --events text
@@ -119,3 +119,28 @@ The client writes one JSON snapshot per command. The default server provider is
 fake and deterministic; choose `--provider compatible` only when provider
 configuration is explicitly set. Both entry points bind/connect only to
 `127.0.0.1`; this milestone does not claim external-network deployment safety.
+
+## M11 guided acceptance work
+
+The guided exercise connected successful tool hooks to eval verdicts. See the
+[request flow](docs/design/M11.md), [architecture review](docs/architecture/M11.md),
+and [actual verification results](docs/acceptance/M11.md). The
+`eval --suite tools --provider fake` suite runs real list/read tools in a
+temporary workspace and checks observed tool calls. M11 also adds opt-in
+compatible CLI telemetry and a local fake performance baseline. Windows and
+Ubuntu CI jobs are configured, but neither has a recorded runner result yet.
+The [real-provider manual acceptance cases](docs/acceptance/M11-real-provider-manual.md)
+cover the public CLI and loopback server/client from a user's perspective.
+The [deferred deployment record](docs/history/2026-09-28-m11-deferred-deployment-validation.md)
+tracks independent environment and service validation for later execution.
+
+For an explicitly configured compatible-provider run, content-free spans,
+lifecycle metrics and structured logs can be appended inside the workspace:
+
+```powershell
+uv run --env-file .env pi-agent --provider compatible --workspace .\safe-workspace --database .\sessions.sqlite --session-id demo --prompt "Read probe.txt and summarize it" --telemetry-file telemetry.jsonl --events jsonl
+```
+
+Telemetry is opt-in. The JSONL file excludes prompt and message bodies and is
+subject to the workspace path policy. The local append sink is intended as a
+small CLI adapter, not a high-throughput or multi-process telemetry backend.

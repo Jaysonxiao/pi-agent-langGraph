@@ -1,6 +1,7 @@
 """Unit tests for application-owned SQLite session metadata."""
 
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,7 +16,7 @@ def test_list_sessions_creates_the_catalog_schema_without_rows(tmp_path: Path) -
 
     assert SqliteSessionCatalog(database_path).list_sessions() == []
 
-    with sqlite3.connect(database_path) as connection:
+    with closing(sqlite3.connect(database_path)) as connection, connection:
         applied_versions = connection.execute(
             "SELECT version FROM pi_agent_schema_migrations"
         ).fetchall()
