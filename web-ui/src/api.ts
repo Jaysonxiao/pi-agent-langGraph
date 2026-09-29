@@ -1,0 +1,35 @@
+export interface Config { workspace: string; provider: string; model: string; server_epoch: string; capabilities: string[]; tool_limits: Record<'read' | 'list' | 'search', number> }
+export interface Session { session_id: string; title: string; workspace: string; archived: boolean; created_at: string; updated_at: string }
+export interface Run { run_id: string; session_id: string; request_id: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_recovery'; error: string | null }
+export interface Message { message_id: string; role: 'user' | 'assistant' | 'tool'; text: string; tool_name: string | null; truncated: boolean }
+export interface Page { messages: Message[]; checkpoint_id: string | null; next_before: number | null }
+export interface Activity { event_id: number; session_id: string; run_id: string; phase: string; tool_name: string | null; outcome: string | null; created_at: string }
+export interface View { session: Session; server_epoch: string; run: Run | null; needs_recovery: boolean; history: Page; activities: Activity[] }
+export interface StepMessage { role: 'user' | 'assistant' | 'tool'; text: string; tool_name?: string; tool_calls?: { name: string; args: Record<string, string | number | boolean> }[] }
+export interface StepDetail { event_id: number; title: string; node: string; input: StepMessage[]; output: StepMessage[]; snapshot_before: Record<string, unknown>; snapshot_after: Record<string, unknown> }
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    ...init, headers: { 'Content-Type': 'application/json', 'X-Pi-Request': '1', ...init?.headers },
+  });
+  if (!response.ok) {
+    let detail = '无法连接到服务，请检查本地服务是否正在运行。';
+    try { detail = (await response.json()).detail ?? detail; } catch { /* Keep safe fallback. */ }
+    throw new ApiError(detail, response.status);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function mergeActivities(current: Activity[], incoming: Activity[]): Activity[] {
+  const entries = new Map(current.map(item => [item.event_id, item]));
+  incoming.forEach(item => entries.set(item.event_id, item));
+  return [...entries.values()].sort((a, b) => a.event_id - b.event_id).slice(-256);
+}
+
+export const statusLabels = {
+  running: '正在运行', completed: '已完成', failed: '运行失败', cancelled: '已停止', needs_recovery: '需要核对',
+};

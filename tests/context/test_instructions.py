@@ -46,6 +46,20 @@ def test_discovery_includes_rules_in_an_active_directory(tmp_path: Path) -> None
     assert discovered == (root_rules, active_rules)
 
 
+def test_pi_instruction_discovery_ignores_codex_agents_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    active_file = _write(workspace / "src" / "main.py", "pass\n")
+    _write(workspace / "AGENTS.md", "codex rules")
+    root_pi_rules = _write(workspace / "PI-AGENTS.md", "pi root rules")
+    leaf_pi_rules = _write(workspace / "src" / "PI-AGENTS.md", "pi leaf rules")
+
+    discovered = discover_workspace_instruction_files(
+        WorkspacePathPolicy(workspace), str(active_file), "PI-AGENTS.md"
+    )
+
+    assert discovered == (root_pi_rules, leaf_pi_rules)
+
+
 def test_discovery_returns_empty_when_no_ancestor_has_rules(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     active_file = _write(workspace / "src" / "main.py", "pass\n")

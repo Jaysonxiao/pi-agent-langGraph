@@ -2,6 +2,28 @@
 
 This repository is a teaching-focused Python reconstruction of Pi Agent's core behavior using LangGraph. Development proceeds one independently testable milestone at a time; see [PLAN.md](PLAN.md) for scope and acceptance criteria. For the milestone document map, stage summaries, audit and prioritized follow-ups, see [docs/README.md](docs/README.md).
 
+## Web UI / 本机工作台
+
+Web UI 按直接交付方式开发, 不使用教学 TODO。提供会话管理、持久化聊天、真实只读工具、执行过程、停止、刷新恢复和历史分页。
+
+Windows / PowerShell 一条命令安装依赖、构建并启动 (需要 Node.js 22.12+、Python 和 uv):
+
+```powershell
+.\scripts\start-web.ps1
+```
+
+打开 <http://127.0.0.1:8766>。默认是明确标识的离线演示模式, 会调用真实 read/list 工具但不请求远程模型。
+
+```powershell
+# 使用项目已有 compatible 配置; 脚本会读取根目录 .env, 不输出密钥。
+.\scripts\start-web.ps1 -Provider compatible
+
+# 构建完成后可直接启动。默认数据库位于用户目录 ~/.pi-agent/web.sqlite。
+uv run --extra web pi-agent-web --provider fake --workspace .
+```
+
+详细的前后端开发、测试、运行边界见 [Web UI 说明](docs/web-ui.md)。
+
 ## Development
 
 Requires Python 3.11+ and uv.

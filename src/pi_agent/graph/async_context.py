@@ -1,6 +1,6 @@
 """Runtime-only dependencies for the M8.5 native async graph."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from itertools import count
 
@@ -21,6 +21,8 @@ class AsyncRunContext:
     tools: AsyncToolRegistry = field(default_factory=AsyncToolRegistry)
     cancellation_token: AsyncCancellationToken = field(default_factory=AsyncCancellationToken)
     max_tool_rounds: int = 4
+    tool_call_limits: Mapping[str, int] = field(default_factory=dict)
+    tool_call_counts: dict[str, int] = field(default_factory=dict)
     retry_policy: RetryPolicy | None = None
     request_timeout_seconds: float | None = None
     # hook 关联信息只活在运行依赖里, 不进 AgentState / checkpoint.
@@ -33,6 +35,8 @@ class AsyncRunContext:
     def __post_init__(self) -> None:
         if self.max_tool_rounds < 0:
             raise ValueError("max_tool_rounds must be zero or greater.")
+        if any(limit < 0 for limit in self.tool_call_limits.values()):
+            raise ValueError("tool call limits must be zero or greater.")
         if self.request_timeout_seconds is not None and self.request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be positive.")
 

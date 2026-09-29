@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 
-from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 
 from pi_agent.extensions import HookEvent, HookRegistry
@@ -97,3 +97,39 @@ def test_server_runtime_preserves_hook_thread_and_run_correlation(tmp_path: Path
     assert {event.phase for event in events} == {"before_model", "after_model"}
     assert all(event.thread_id == "hook-session" for event in events)
     assert all(event.run_id == "run-42" for event in events)
+
+
+def test_server_runtime_keeps_agents_instructions_without_web_prompt(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "AGENTS.md").write_text("Server project rule", encoding="utf-8")
+    (workspace / "PI-AGENTS.md").write_text("Web-only project rule", encoding="utf-8")
+
+    class CaptureModel:
+        def __init__(self) -> None:
+            self.calls: list[tuple[AnyMessage, ...]] = []
+
+        async def ainvoke(
+            self, messages: Sequence[AnyMessage], config: RunnableConfig | None = None, /
+        ) -> AIMessage:
+            del config
+            self.calls.append(tuple(messages))
+            return AIMessage(content="done")
+
+    model = CaptureModel()
+    config = SessionRuntimeConfig(
+        database=tmp_path / "sessions.sqlite",
+        workspace=workspace,
+        session_id="server-instructions",
+    )
+    asyncio.run(
+        ServerSessionRuntime(model=model, server_epoch="epoch-1").prompt(
+            config, content="hello", message_id="user-1"
+        )
+    )
+
+    assert isinstance(model.calls[0][0], SystemMessage)
+    prompt = str(model.calls[0][0].content)
+    assert "Server project rule" in prompt
+    assert "Web-only project rule" not in prompt
+    assert "You are Pi, a helpful local workspace assistant." not in prompt

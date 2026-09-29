@@ -1,8 +1,10 @@
 """Shared async session runner used by application boundaries."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pi_agent.context.instructions import INSTRUCTION_FILENAME
 from pi_agent.context.runtime import ContextConfig
 from pi_agent.domain.state import AgentState
 from pi_agent.extensions import HookRegistry
@@ -30,6 +32,10 @@ class SessionRuntimeConfig:
     hooks: HookRegistry | None = None
     run_id: str | None = None
     cancellation_token: AsyncCancellationToken = field(default_factory=AsyncCancellationToken)
+    enabled_tools: tuple[str, ...] = field(default=("read", "list", "search"), kw_only=True)
+    tool_call_limits: Mapping[str, int] = field(default_factory=dict, kw_only=True)
+    instruction_filename: str = field(default=INSTRUCTION_FILENAME, kw_only=True)
+    prompt_template: str = field(default="{instructions}", kw_only=True)
 
 
 async def run_session(
@@ -40,7 +46,9 @@ async def run_session(
     message_id: str,
 ) -> AgentState:
     """Run a prompt with injected dependencies and durable async checkpoints."""
-    tools, definitions = create_async_read_only_registry(config.workspace)
+    tools, definitions = create_async_read_only_registry(
+        config.workspace, enabled_tools=config.enabled_tools
+    )
     binder = getattr(model, "bind_tools", None)
     if callable(binder) and (
         not isinstance(model, CompatibleAsyncChatModel) or model.supports_tool_binding
@@ -51,10 +59,17 @@ async def run_session(
     context = AsyncRunContext(
         model=model,
         tools=tools,
+        max_tool_rounds=max(1, sum(config.tool_call_limits.values()))
+        if config.tool_call_limits
+        else 4,
+        tool_call_limits=config.tool_call_limits,
         retry_policy=config.retry_policy,
         request_timeout_seconds=config.request_timeout_seconds,
         context_config=ContextConfig(
-            workspace_policy=WorkspacePathPolicy(config.workspace), active_path="."
+            workspace_policy=WorkspacePathPolicy(config.workspace),
+            active_path=".",
+            instruction_filename=config.instruction_filename,
+            prompt_template=config.prompt_template,
         ),
         hooks=config.hooks,
         thread_id=config.session_id,

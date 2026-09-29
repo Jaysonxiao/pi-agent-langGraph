@@ -13,6 +13,7 @@ ToolFailureCode = Literal[
     "invalid_arguments",
     "tool_execution_error",
     "tool_round_limit",
+    "tool_call_limit",
 ]
 
 

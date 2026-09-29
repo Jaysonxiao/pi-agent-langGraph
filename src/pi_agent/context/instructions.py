@@ -7,6 +7,7 @@ from typing import Literal
 from pi_agent.security import PathPolicyError, WorkspacePathPolicy
 
 INSTRUCTION_FILENAME = "AGENTS.md"
+PI_INSTRUCTION_FILENAME = "PI-AGENTS.md"
 InstructionLoadCode = Literal[
     "not_found", "not_file", "read_error", "invalid_utf8", "outside_workspace"
 ]
@@ -33,15 +34,18 @@ class InstructionLoadError(ValueError):
 def discover_workspace_instruction_files(
     policy: WorkspacePathPolicy,
     active_path: str,
+    instruction_filename: str = INSTRUCTION_FILENAME,
 ) -> tuple[Path, ...]:
-    """Return ancestor instruction files from workspace root to active directory."""
+    """Return matching ancestor instruction files from workspace root to active directory."""
+    if not instruction_filename or Path(instruction_filename).name != instruction_filename:
+        raise ValueError("instruction_filename must be a single file name.")
     active = policy.resolve(active_path)
     # 文件从父目录起算; 目录把自己算进祖先链.
     active_directory = active.parent if active.is_file() else active
     return tuple(
         instruction
         for directory in _ancestor_directories(policy.root, active_directory)
-        if (instruction := _instruction_file(policy, directory)) is not None
+        if (instruction := _instruction_file(policy, directory, instruction_filename)) is not None
     )
 
 
@@ -112,9 +116,13 @@ def _ancestor_directories(root: Path, active_directory: Path) -> tuple[Path, ...
     return tuple(directories)
 
 
-def _instruction_file(policy: WorkspacePathPolicy, directory: Path) -> Path | None:
+def _instruction_file(
+    policy: WorkspacePathPolicy,
+    directory: Path,
+    instruction_filename: str = INSTRUCTION_FILENAME,
+) -> Path | None:
     try:
-        candidate = policy.resolve(str(directory / INSTRUCTION_FILENAME))
+        candidate = policy.resolve(str(directory / instruction_filename))
     except PathPolicyError as error:
         if error.code == "not_found":
             return None

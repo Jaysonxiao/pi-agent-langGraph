@@ -146,3 +146,48 @@ def test_async_provider_tool_loop_stops_at_round_limit() -> None:
     assert cast(dict[str, object], json.loads(tool_message.content))["code"] == "tool_round_limit"
     assert result["status"] == "failed"
     assert read_tool.calls == 0
+
+
+def test_async_provider_tool_loop_enforces_each_tools_call_limit() -> None:
+    read_tool = ReadTool()
+    model: AsyncChatModel = ScriptedAsyncModel(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "read",
+                        "args": {"path": "README.md"},
+                        "id": "call-read-allowed",
+                        "type": "tool_call",
+                    },
+                    {
+                        "name": "read",
+                        "args": {"path": "README.md"},
+                        "id": "call-read-blocked",
+                        "type": "tool_call",
+                    },
+                ],
+            ),
+            AIMessage(content="Finished with the available result."),
+        ]
+    )
+    context = AsyncRunContext(
+        model=model,
+        tools=AsyncToolRegistry([read_tool]),
+        tool_call_limits={"read": 1},
+        max_tool_rounds=2,
+    )
+
+    result = asyncio.run(
+        build_async_tool_graph().ainvoke(
+            create_initial_state("read README.md"),
+            context=context,
+        )
+    )
+
+    tool_messages = [message for message in result["messages"] if isinstance(message, ToolMessage)]
+    assert result["status"] == "completed"
+    assert read_tool.calls == 1
+    assert [message.status for message in tool_messages] == ["success", "error"]
+    assert json.loads(str(tool_messages[1].content))["code"] == "tool_call_limit"

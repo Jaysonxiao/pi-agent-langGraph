@@ -7,6 +7,7 @@ from pi_agent.context.budget import BoundedContext, fit_context_messages
 from pi_agent.context.compaction import CompactionPlan, plan_context_compaction
 from pi_agent.context.instructions import (
     INSTRUCTION_FILENAME,
+    PI_INSTRUCTION_FILENAME,
     InstructionLoadError,
     WorkspaceInstruction,
     discover_workspace_instruction_files,
@@ -24,6 +25,7 @@ from pi_agent.context.summary import apply_compaction_summary
 
 __all__ = [
     "INSTRUCTION_FILENAME",
+    "PI_INSTRUCTION_FILENAME",
     "AsyncModelSummarizer",
     "AsyncSummarizer",
     "BoundedContext",

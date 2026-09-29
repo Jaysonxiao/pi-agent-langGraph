@@ -76,8 +76,18 @@ def create_read_only_definitions(
 
 def create_async_read_only_registry(
     workspace: Path,
+    *,
+    enabled_tools: tuple[str, ...] | None = None,
 ) -> tuple[AsyncToolRegistry, tuple[ExecutableTool, ...]]:
-    definitions = create_read_only_definitions(workspace)
+    available = create_read_only_definitions(workspace)
+    if enabled_tools is None:
+        definitions = available
+    else:
+        by_name = {tool.name: tool for tool in available}
+        unknown = set(enabled_tools).difference(by_name)
+        if unknown:
+            raise ValueError(f"Unknown read-only tools: {', '.join(sorted(unknown))}")
+        definitions = tuple(by_name[name] for name in enabled_tools)
     return AsyncToolRegistry(AsyncReadOnlyTool(tool) for tool in definitions), definitions
 
 

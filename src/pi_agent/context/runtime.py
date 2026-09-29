@@ -10,6 +10,7 @@ from pi_agent.context.assembly import assemble_context_messages
 from pi_agent.context.async_summarizer import AsyncSummarizer
 from pi_agent.context.compaction import plan_context_compaction
 from pi_agent.context.instructions import (
+    INSTRUCTION_FILENAME,
     WorkspaceInstruction,
     discover_workspace_instruction_files,
     load_workspace_instructions,
@@ -34,6 +35,7 @@ class ContextConfig:
     keep_recent_messages: int | None = None
     summary: str | None = None
     global_instruction_file: Path | None = None
+    instruction_filename: str = INSTRUCTION_FILENAME
     prompt_template: str = "{instructions}"
     max_tokens: int | None = None
     compaction_threshold_tokens: int | None = None
@@ -108,7 +110,11 @@ def _instructions(config: ContextConfig) -> tuple[WorkspaceInstruction, ...]:
         policy = WorkspacePathPolicy(path.parent)
         instructions = load_workspace_instructions(policy, (path,))
     if config.workspace_policy is not None and config.active_path is not None:
-        paths = discover_workspace_instruction_files(config.workspace_policy, config.active_path)
+        paths = discover_workspace_instruction_files(
+            config.workspace_policy,
+            config.active_path,
+            config.instruction_filename,
+        )
         seen = {instruction.path for instruction in instructions}
         instructions += load_workspace_instructions(
             config.workspace_policy, tuple(path for path in paths if path not in seen)

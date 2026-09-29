@@ -14,3 +14,9 @@ dist/
 htmlcov/
 *.egg-info/
 *.py[cod]
+.pi-agent/
+web-ui/node_modules/
+web-ui/test-results/
+web-ui/playwright-report/
+src/pi_agent/web/static/
+web-ui/*.tsbuildinfo

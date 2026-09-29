@@ -2,6 +2,8 @@
 
 ## 1. 当前状态与文档分工
 
+- Web UI 扩展: 2026-09-29 用户明确选择直接快速交付, 不走教学模式、不留学习者 TODO。独立于 M0-M11 的验收与归档, 复用现有运行时交付本机单用户工作台。使用方式、实测结果与边界见 [Web UI](docs/web-ui.md)。M11 后置遗留仍按其验收记录跟踪，不因 Web UI 扩展关闭。
+
 - 初始规划：2026-09-02；M5 初次归档：2026-09-18；M5 遗留项复验、M6 实现与归档：2026-09-21（Asia/Shanghai）。
 - M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）首次归档；2026-09-24 补齐真实 Provider CLI 只读闭环、重试/时限、命令人审入口，并在配置的 compatible 服务完成 4 个 live smoke 与合成文件 CLI 工具调用。初次归档与后续复验分列于 [M8](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
 - M9 于 2026-09-24 启动、完成已交付范围并归档。用户报告最终组合测试 **28 passed**、mypy **203 source files**、Ruff lint/format 与 fake eval CLI 通过；默认 CLI telemetry、带工具调用的 CLI eval 和可选 live eval 的边界见 [M9 归档](docs/acceptance/M9.md)。

@@ -110,11 +110,24 @@ async def async_tool_node(
         )
         outcome: HookOutcome = "failed"
         try:
-            result = await runtime.context.tools.execute_call(
-                call, runtime.context.cancellation_token
-            )
-            # ToolMessage.status 是 success/error, hook 只映射成 completed/failed.
-            outcome = "completed" if result.status == "success" else "failed"
+            limit = runtime.context.tool_call_limits.get(tool_name)
+            count = runtime.context.tool_call_counts.get(tool_name, 0)
+            if limit is not None and count >= limit:
+                result = create_error_tool_message(
+                    call,
+                    code="tool_call_limit",
+                    message=(
+                        f"Tool call limit reached for {tool_name} ({limit}); call was not executed."
+                    ),
+                    details={"tool": tool_name, "limit": limit},
+                )
+            else:
+                runtime.context.tool_call_counts[tool_name] = count + 1
+                result = await runtime.context.tools.execute_call(
+                    call, runtime.context.cancellation_token
+                )
+                # ToolMessage.status 是 success/error, hook 只映射成 completed/failed.
+                outcome = "completed" if result.status == "success" else "failed"
             results.append(result)
         except asyncio.CancelledError:
             # 取消不投影半截 ToolMessage; after_tool 记 cancelled 后继续冒泡.
