@@ -1,61 +1,59 @@
-# Repository Guidelines
+# Pi Agent LangGraph：Codex 项目速览
 
-## Project Structure & Module Organization
+## 项目定位与当前状态
 
-`PROJECT_SPEC.md` is the source of truth; `PLAN.md` owns current milestone status and scope, `LEARNING_LOG.md` summarizes learning and decisions by milestone, and `docs/acceptance/Mx.md` records acceptance evidence and open gaps. Treat `docs/history/` as historical snapshots, not current instructions. Keep implementation, acceptance, archive, and revalidation dates distinct. Archiving delivered work must not hide unmet acceptance criteria.
+本项目面向正在学习 Agent 工程的 Python 开发者：参考 Pi Agent 的设计，用 Python / LangGraph 实现可运行、可测试的模型—工具循环、会话、上下文和运行时。重点是理解 Pi 的设计意图与本项目的改造取舍，不追求逐项复制 Pi。Python 要求 `>=3.11,<3.14`；依赖和脚本以 `pyproject.toml` 为准。仓库采用 MIT 协议，见 `LICENSE`。
 
-When code is introduced, use a `src` layout:
+M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立扩展。新环境 Windows/Linux 和真实服务部署验证仍有后置项，不能将归档等同于生产就绪。`PLAN.md` 是当前状态、范围和验收门槛的权威记录；`docs/acceptance/` 保存实际证据和未关闭项。`README.md` 是运行入口，`docs/README.md` 是文档索引，`LEARNING_LOG.md` 记录学习与决策。`docs/history/` 只作历史追溯。实现、验收、归档和复验日期分别记录。
 
-- `src/pi_agent/`: graph state, nodes, tools, model adapters, persistence, and CLI.
-- `tests/`: pytest tests mirroring the source layout (for example, `tests/tools/test_file_read.py`).
-- `docs/`: architecture notes and milestone acceptance records.
-- `.env.example`: documented configuration names only; never include secrets.
+## 一条请求如何运行
 
-Keep domain logic separate from LangGraph wiring, storage, model providers, and user interfaces.
+用户请求从 Web、CLI 或本机客户端进入；会话与上下文层准备模型输入；LangGraph 模型节点决定回复或调用工具；工具层验证参数和工作区路径，将结果交回模型；事件与 Hook 暴露过程，SQLite 保存需要持久化的会话和检查点。失败、取消、超时及恢复要沿这条链路检查。图负责状态、节点和路由；路径授权、模型适配、存储、审批和界面由应用层负责。
 
-## Guided Learning Workflow
+- `pi-agent --provider fake`：默认离线、确定性的**最小图**，不代表真实工具对话。
+- `pi-agent --provider compatible`：显式启用持久化异步模型/工具链；只读 `read`、`list`、`search` 受工作区限制。命令执行须先形成持久化提案，再由交互终端审批；没有直接文件写入入口。
+- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实 `read` / `list`；compatible 使用服务端模型配置。Web 提供会话、设置、SSE 阶段与节点详情，目前没有 Web 命令审批或逐 token 展示。
+- `pi-agent-server` / `pi-agent-client`：共享令牌认证的 loopback TCP 会话入口，服务端持有工作区、模型与数据库；不作为公网服务部署。
 
-This is a teaching project. Use a mandatory "whole → part → whole" narrative at both project and milestone scale.
+Web 工作区指令使用 `PI-AGENTS.md`，**不加载根目录这个 Codex 用的 `AGENTS.md`**；CLI/TCP 的上下文管线仍使用工作区 `AGENTS.md`。见 `docs/pi-agents.md`。
 
-For every milestone, follow this order:
+## 代码地图
 
-1. **Whole system first:** show the end-to-end Agent flow and module map, marking what is already complete, what this milestone owns, and what remains. Explain why this milestone is needed and where the flow currently breaks without it.
-2. **Current vertical slice:** follow one concrete request or failure case through this milestone's upstream input, state transitions, downstream output, and failure path.
-3. **Focused source and design:** trace the relevant Pi call chain and design intent, then map it to Python/LangGraph in the causal order "problem → Pi design → rewrite choice → reason → code location → test evidence." Do not open with a directory, type, or API inventory.
-4. **One learner exercise:** only after the first three steps, assign one small, testable core task. Explain how its scaffold modules collaborate and what part of the end-to-end flow the TODO connects. Include the target file, signature, inputs, outputs, constraints, tests, expected result, and acceptance condition; never hand off only a function name.
-5. **Return to the whole:** after reviewing the attempt, rerun the same scenario through the updated flow, compare before and after, place changed files back in the module map, identify production simplifications and remaining gaps, and show exactly where the next milestone connects.
+- `src/pi_agent/domain/`、`graph/`：消息状态、节点、工具路由与图构建。
+- `tools/`、`security/`：工具注册、只读操作、命令/文件安全策略与路径约束。
+- `models/`、`runtime/`：fake/compatible 适配、请求、重试、超时与取消。
+- `sessions/`、`context/`：SQLite 检查点、会话元数据、规则装配与压缩。
+- `events/`、`extensions/`、`telemetry/`、`evals/`：过程投影、Hook、脱敏观测与评测。
+- `cli/`、`protocol/`、`server/`、`client/`：终端入口及本机协议链。
+- `web/`、`web-ui/`：Web 后端与 React/TypeScript 前端；`scripts/start-web.ps1` 安装、构建并启动。生成的 `src/pi_agent/web/static/` 不入 Git。
+- `tests/`：按领域对应源码的 pytest；`web-ui/e2e/` 为浏览器测试。
 
-Do not implement an entire milestone for the learner by default. Provide scaffolding, interfaces, TODOs, examples, tests, and verification commands; let the learner implement a meaningful core section. Review their attempt and guide corrections before completing it. Write the learner's assigned code only when explicitly requested, after repeated blocking, or when it is low-value boilerplate, and state why.
+让领域逻辑与图编排、存储、Provider 和 UI 保持分离。修改跨模块行为时沿具体请求追踪上游输入、状态变化、输出和失败路径，并检查相应测试。
 
-Treat pinned commits and current dependency versions as concise reproducibility checks, not the teaching focus, unless they materially change the design.
+## 协作与教学方式
 
-## Build, Test, and Development Commands
+用户要求引导式里程碑时，按“系统全貌 → 一个可验证切片 → 回到全貌”讲解：用一个请求追踪真实 Pi 调用链，再按“问题 → Pi 设计 → Python/LangGraph 选择 → 原因 → 代码位置 → 测试证据”说明。提供脚手架、接口、测试和一个有意义的学习者 TODO；评审其实现并等待验收，不默认代写整阶段。用户明确要求直接实现的任务（例如 Web 工作台扩展）按直接交付处理，不强行改成教学练习。没有新的里程碑授权时，不自行推进下一阶段。
 
-The project uses a src layout, pyproject.toml, and uv. Keep these configured commands working:
+判断当前行为以代码、配置和可运行证据为准；历史验收数只代表当时范围。修改 README、PLAN 或验收文档时同步核对有效链接和状态，不能用较新的测试结果回填旧阶段。不要把未经运行的真实模型、网络、CI、数据库或部署检查写成通过。
+
+## 开发与验证
+
+Windows / PowerShell 在仓库根目录运行；优先用 `uv run`，按改动范围先运行聚焦测试，再运行必要的质量门禁：
 
 ```powershell
+uv run pytest tests/tools -q --basetemp=.pytest-tmp-tools
 uv run pytest -q --basetemp=.pytest-tmp
-uv run pytest tests/tools -q --basetemp=.pytest-tmp
 uv run mypy src tests
 uv run ruff check .
 uv run ruff format --check .
 uv run pi-agent --provider fake --prompt hello --events jsonl
+uv run pi-agent eval --suite tools --provider fake
 ```
 
-The default fake CLI still runs a minimal graph. Explicit `--provider compatible` runs the persistent async read-only tool graph; command execution requires a separate durable proposal and interactive approval. See the M8 correction record for validation and limits. Do not infer direct file-write access or an OS sandbox from the CLI entry point.
+Web 改动另运行 `uv run --extra web pytest tests/web -q --basetemp=.pytest-tmp-web`，并在 `web-ui/` 运行 `npm run test`、`npm run build`；浏览器交互改动再运行 `npm run test:e2e`。首次环境安装见 `README.md`。真实 Provider 测试必须显式配置 `.env` 和 `PI_AGENT_LIVE=1`；默认测试保持离线。`uv` 缓存权限问题应区分于代码失败，记录实际执行边界。
 
-## Coding Style & Naming Conventions
+## 安全与提交
 
-Target Python 3.11+ and use four-space indentation, type annotations, and small modules with explicit responsibilities. Use `snake_case` for modules, functions, and variables; `PascalCase` for classes and typed state models; and `UPPER_SNAKE_CASE` for constants. Prefer typed interfaces or protocols at model, tool, and persistence boundaries. Ruff should own formatting and lint rules once configured.
+密钥只从环境或显式 `.env` 加载，`.env.example` 只写变量名与说明。不要在日志、checkpoint、测试输出或提交中暴露密钥、Authorization 头及私有正文。文件和命令工具必须验证工作区、参数、超时及审批；路径限制不是 OS 沙箱。Web 数据库应放在工作区之外；避免 Web 与独立 CLI/TCP 同时驱动同一数据库。
 
-## Testing Guidelines
-
-Use pytest. Name files `test_<subject>.py` and tests `test_<behavior>`. Cover graph routing, tool argument validation, iteration limits, cancellation, persistence recovery, and failure paths. Isolate external models, networks, and storage behind fakes, stubs, or mocks. Every milestone must finish with independently runnable tests and documented expected output.
-
-## Commit & Pull Request Guidelines
-
-Git history is available but currently contains only a small number of retrospective commits, so no stable repository-specific convention can be inferred. Use concise Conventional Commit subjects such as `feat: add minimal tool loop` or `test: cover command timeout`. Keep commits milestone-focused. Pull requests should explain the architectural change, list verification commands and results, link the relevant plan item or issue, and include terminal output or screenshots when CLI behavior changes.
-
-## Security & Agent Safety
-
-Read API keys only from environment variables. Restrict file and command tools to an approved workspace, validate arguments, enforce timeouts, and reject destructive commands by default. Never log secrets or persist credentials in checkpoints.
+使用 Python 类型标注、四空格缩进和小模块；Ruff 管格式，mypy 管类型。提交保持单一主题，可用简短 Conventional Commit 标题。PR 描述说明触发场景、行为变化、验证命令与结果，并链接相关计划/验收项。

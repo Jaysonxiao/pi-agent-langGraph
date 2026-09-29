@@ -4,7 +4,7 @@
 
 ## 核查口径
 
-1. 需求以 [PROJECT_SPEC](../../PROJECT_SPEC.md) 为准；里程碑范围和状态以 [PLAN](../../PLAN.md) 为准；运行事实以当前源码和可执行测试为准；用户提供的 live 输出单列为用户报告。
+1. 审计当时以 `PROJECT_SPEC.md` 为需求依据（该文件现已删除）；里程碑范围和状态以 [PLAN](../../PLAN.md) 为准；运行事实以当前源码和可执行测试为准；用户提供的 live 输出单列为用户报告。当前项目定位与协作方式见 [AGENTS.md](../../AGENTS.md)。
 2. 初次审计时 Git 可见 `d1560b0`（回溯提交 M1–M5）和 `ba930a0`（提交 M6/M7）；后来新增 `c4e91b8` 文档整理提交。它们均不能单独证明每个子切片的具体实现时间；M8 代码当前仍有未提交工作树内容。
 3. 2026-09-24 执行 `uv run pytest -q -m 'not live' --basetemp=.pytest-tmp-doc-audit-20260923` 为 **403 passed、4 deselected**；mypy **179 source files**，Ruff lint 全部通过，format **200 files**。2026-09-23 记录的全仓结果是 **403 passed、4 skipped**，范围/日期不同，不能写成同一次运行。
 

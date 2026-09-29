@@ -7,6 +7,8 @@ name = "pi-agent-langgraph"
 version = "0.1.0"
 description = "A teaching-focused Python reconstruction of Pi Agent using LangGraph."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
 scripts = { pi-agent = "pi_agent.cli.app:main", pi-agent-server = "pi_agent.server.app:main", pi-agent-client = "pi_agent.client.app:main", pi-agent-web = "pi_agent.web.app:main" }
 dependencies = [

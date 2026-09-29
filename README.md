@@ -1,168 +1,373 @@
+<div align="center">
+
 # Pi Agent LangGraph
 
-This repository is a teaching-focused Python reconstruction of Pi Agent's core behavior using LangGraph. Development proceeds one independently testable milestone at a time; see [PLAN.md](PLAN.md) for scope and acceptance criteria. For the milestone document map, stage summaries, audit and prioritized follow-ups, see [docs/README.md](docs/README.md).
+**用 Python + LangGraph 重构 Pi Agent 核心能力，把模型、工具、会话与可观测性串成可运行、可验证的 Agent。**
 
-## Web UI / 本机工作台
+![Python 3.11–3.13](https://img.shields.io/badge/Python-3.11%E2%80%933.13-3776AB?logo=python&logoColor=white)
+![LangGraph 1.2](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
+![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-会话持久化-003B57?logo=sqlite&logoColor=white)
+[![License MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Web UI 按直接交付方式开发, 不使用教学 TODO。提供会话管理、持久化聊天、真实只读工具、执行过程、停止、刷新恢复和历史分页。
+[功能概览](#features) · [快速开始](#quickstart) · [使用方法](#usage) · [配置说明](#configuration) · [文档与求助](#help)
 
-Windows / PowerShell 一条命令安装依赖、构建并启动 (需要 Node.js 22.12+、Python 和 uv):
+</div>
+
+面向希望从“会调用模型”走向“能理解和构建完整 Agent”的 Python / AI 应用开发者。项目以 Pi 的核心设计为学习线索，提供可逐阶段验证的实现、命令行工具，以及可直接体验的中文本机工作台。
+
+> **项目进度**：M0–M11 已按各自交付范围归档；Web UI 为独立扩展。新环境 Windows / Linux 与真实服务部署验证仍有后置项，详见 [当前计划](PLAN.md) 和 [M11 验收记录](docs/acceptance/M11.md)。
+
+<a id="features"></a>
+
+## ✨ 功能概览
+
+![Pi 本机工作台：左侧会话、中间对话与工具结果、右侧执行时间线](docs/assets/workbench-conversation.png)
+
+*已有本机浏览器测试截图：离线演示模式读取合成工作区中的 README，展示真实工具结果。*
+
+| 能力 | 可以做什么 | 使用入口 |
+| :--- | :--- | :--- |
+| 🖥️ 本机工作台 | 中文深色界面、Markdown 回复、会话搜索与归档、移动端布局 | Web UI |
+| 🔁 模型与工具循环 | 连接 compatible 模型，调用 `read` / `list` / `search`，将结果交回模型 | Web / compatible CLI |
+| 💾 持久化会话 | SQLite 保存消息与检查点；Web 支持刷新后继续查看、历史分页 | Web / compatible CLI / 会话 API |
+| 🧠 上下文管理 | 项目规则、模板、近似 token 预算、历史压缩与摘要 | 上下文管线 / `context inspect` |
+| 🛡️ 工具与执行控制 | 工作区路径约束；CLI 命令提案经过交互审批后执行 | 只读工具 / `command` |
+| 🔎 过程与评测 | Web 节点详情、图事件、可选 telemetry、离线工具评测 | Web / CLI / eval |
+| 🔌 本机客户端与服务端 | 共享令牌认证、创建会话、发送请求、取消与快照 | `pi-agent-server` / `pi-agent-client` |
+
+一次“读取文件并总结”的请求如何流转（compatible 运行路径）：
+
+```mermaid
+flowchart LR
+    A[用户请求<br/>Web / CLI / 本机客户端] --> B[会话与上下文]
+    B --> C[LangGraph 模型节点]
+    C --> D{需要工具?}
+    D -->|是| E[校验工作区与参数]
+    E --> F[read / list / search]
+    F -->|工具结果| C
+    D -->|否| G[回复用户]
+    B -.-> H[(SQLite 检查点)]
+    C -.-> H
+    F -.-> H
+    C -.-> I[事件 / Hooks]
+    F -.-> I
+```
+
+默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供只读工具与节点级进度；写文件、浏览器终端、Web 命令审批与逐 token 展示尚未接入。工作区路径限制不等于操作系统沙箱。
+
+<a id="quickstart"></a>
+
+## 🚀 快速开始
+
+### 1. 准备环境
+
+| 依赖 | 版本 / 要求 | 用途 |
+| :--- | :--- | :--- |
+| Python | `>=3.11,<3.14` | Agent 运行时 |
+| uv | 本机已安装，`uv --version` 可用 | Python 依赖与命令管理 |
+| Node.js / npm | Node.js `22.12+`，或符合 Vite 7 要求的版本 | 仅构建 Web 前端时需要 |
+| Git | 可用 | 获取仓库 |
+
+以下命令使用 **Windows / PowerShell**，均在项目根目录执行。依赖首次安装需要联网；fake 示例运行时不调用远程模型。
+
+```powershell
+git clone https://github.com/Jaysonxiao/pi-agent-langGraph.git
+cd pi-agent-langGraph
+```
+
+### 2. 选择一个入口
+
+| 想先体验什么 | 选择 |
+| :--- | :--- |
+| 图形界面、文件读取和持久化聊天 | **A · Web 工作台** |
+| 最小 Agent 请求与事件输出 | **B · 离线 CLI** |
+
+**A · 启动 Web 工作台**
 
 ```powershell
 .\scripts\start-web.ps1
 ```
 
-打开 <http://127.0.0.1:8766>。默认是明确标识的离线演示模式, 会调用真实 read/list 工具但不请求远程模型。
+脚本会安装 Python / 前端依赖、构建静态资源并启动服务。打开 [http://127.0.0.1:8766](http://127.0.0.1:8766)，输入：
+
+```text
+读取 README.md
+```
+
+**预期结果**：页面标识为“离线演示”；中间显示文件读取结果，右侧出现 `read` 执行记录。刷新页面仍可查看会话。此模式验证真实工具和持久化流程；模型分析与总结需要切换 compatible。
+
+**B · 运行最小 CLI 示例**
 
 ```powershell
-# 使用项目已有 compatible 配置; 脚本会读取根目录 .env, 不输出密钥。
-.\scripts\start-web.ps1 -Provider compatible
+uv sync
+uv run pi-agent --provider fake --prompt hello --events text
+```
 
-# 构建完成后可直接启动。默认数据库位于用户目录 ~/.pi-agent/web.sqlite。
+**预期输出**：
+
+```text
+[message] model/assistant: fake reply
+[state_update] model: {"status":"completed","error":null}
+```
+
+这个最小示例无需 API Key，不创建持久化会话。接入真实模型见下方“使用方法”和“配置说明”。
+
+<details>
+<summary>手工安装、构建并启动 Web</summary>
+
+```powershell
+uv sync --extra web
+Push-Location web-ui
+npm ci
+npm run build
+Pop-Location
 uv run --extra web pi-agent-web --provider fake --workspace .
 ```
 
-详细的前后端开发、测试、运行边界见 [Web UI 说明](docs/web-ui.md)。
+前端构建产物不纳入 Git，新 checkout 需要先构建。构建后无需 Node.js 常驻服务；开发模式与前端测试见 [Web UI 文档](docs/web-ui.md)。
 
-## Development
+</details>
 
-Requires Python 3.11+ and uv.
+<a id="usage"></a>
+
+## 🧭 使用方法
+
+### Web：聊天、读取文件与查看执行过程
+
+1. 新建会话，输入请求；例如 `列出当前目录的文件` 或 `读取 README.md`。
+2. 在右侧查看模型与工具阶段，点击已完成节点查看输入、输出和检查点投影。
+3. 使用“工作区与工具”切换本地工作区，启停工具并调整单轮调用上限。
+4. 需要中断时点击“停止运行”；历史会话可重命名、归档和恢复。
+
+已创建会话固定使用创建时的工作区。按下方配置好 `.env` 后，可启动真实模型：
 
 ```powershell
-uv sync --all-extras
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy src tests
-uv run pytest
+.\scripts\start-web.ps1 -Provider compatible
+
+# 可选：指定工作区和端口；目录需要已存在。
+.\scripts\start-web.ps1 -Provider compatible -Workspace .\safe-workspace -Port 8766
 ```
 
-M0–M10 have archived deliveries within their documented scope. M11 is in progress. The default fake run CLI remains deterministic and non-persistent:
+### CLI：读取文件并保存会话
+
+先按“配置说明”创建 `.env`。下面使用合成文件，准备一个独立工作区：
 
 ```powershell
-uv run pi-agent --provider fake --prompt hello --events text
-uv run pi-agent --provider fake --prompt hello --events jsonl
+New-Item -ItemType Directory -Force .\safe-workspace
+Set-Content -LiteralPath .\safe-workspace\probe.txt -Encoding utf8 -Value "Marker: PI-DEMO-001. This is a local test file."
+
+uv run --env-file .env pi-agent --provider compatible `
+  --workspace .\safe-workspace `
+  --database .\sessions.sqlite `
+  --session-id demo `
+  --prompt "Read probe.txt and summarize it" `
+  --events jsonl
 ```
 
-M6 adds SQLite-backed session APIs for resume, history, state forks, application metadata, and a metadata listing command:
+**预期结果**：模型请求读取 `probe.txt`，CLI 输出工具与模型事件，回复基于文件内容，消息与检查点写入 `sessions.sqlite`。实际工具选择和回答由配置的模型决定。
+
+继续使用相同数据库和会话 ID，可以追加一轮对话：
 
 ```powershell
-uv run pi-agent session list --database .\checkpoints.sqlite
+uv run --env-file .env pi-agent --provider compatible --workspace .\safe-workspace --database .\sessions.sqlite --session-id demo --prompt "What marker did you just read?" --events text
+uv run pi-agent session list --database .\sessions.sqlite
 ```
 
-M7 prepares ephemeral model context through `RunContext.context_config`: explicit global/workspace rules, templates, approximate token budgets, a synchronous summary-model adapter, protected recent turns and tool facts. Context errors stop the main model while preserving durable history. Inspect the same preparation pipeline without a model call:
+第二条命令每行输出一条会话 JSON，包含 `session_id`、`created_at`、`updated_at`。
+
+| 常用参数 | 含义 / 示例 |
+| :--- | :--- |
+| `--provider` | `fake` 为默认最小演示；`compatible` 显式启用真实模型路径 |
+| `--workspace` | 工具允许访问的已有目录，如 `.\safe-workspace` |
+| `--database` / `--session-id` | compatible CLI 必填；数据库父目录必须已存在 |
+| `--events` | `text` 便于阅读；`jsonl` 便于程序处理 |
+| `--model` / `--base-url` | 覆盖对应的环境配置 |
+| `--trace-file` | 可选事件 / 用量元数据文件，如 `trace.jsonl` |
+| `--telemetry-file` | 可选生命周期 spans、指标与结构化日志，如 `telemetry.jsonl` |
+| `--allow-executable` | 可重复指定允许提案的程序；执行仍需独立交互审批 |
+
+`--trace-file` 与 `--telemetry-file` 用于 compatible CLI，路径受工作区策略约束；例如 `telemetry.jsonl` 写入 `safe-workspace/telemetry.jsonl`，不包含 prompt 或消息正文。SQLite 会话会保存对话，发送给模型的文件内容应在你的授权范围内。更多参数使用 `uv run pi-agent --help` 查看。
+
+<details>
+<summary>上下文检查与离线工具评测</summary>
 
 ```powershell
-uv run pi-agent context inspect --provider fake
+# 检查指令来源、消息角色、大小估算和压缩统计，不调用模型、不打印提示词正文。
 uv run pi-agent context inspect --provider fake --workspace . --active-path src/pi_agent --max-tokens 4096
+
+# 在临时工作区运行真实 list/read 工具，并检查实际工具调用。
+uv run pi-agent eval --suite tools --provider fake
 ```
 
-Inspection reports source paths, message roles, size estimates and compaction statistics without echoing prompt text. Token estimates are heuristics; real-provider capacity and summary quality remain open for later evaluation.
+工具评测预期返回 JSON 报告，包含 `"passed":1`、`"total":1`。token 统计为近似估算；该评测验证离线工具链路，真实模型质量另行评估。
 
-## M8 compatible-provider CLI
+</details>
 
-The explicit `compatible` mode now runs the persistent async model/tool graph. It
-exposes workspace-confined `read`, `list`, and `search`, bounded provider retries,
-and JSONL/text graph events. It never enables network access merely because a
-`.env` file exists. See [M8 closure](docs/acceptance/M8-closure.md) for validation
-evidence and remaining boundaries.
+<details>
+<summary>命令提案与人工审批（CLI）</summary>
 
-Create a local, gitignored `.env` from `.env.example` and set these values:
+compatible 请求加入 `--allow-executable` 后，模型可以提出允许列表内的命令。获得提案 ID 后，在交互终端审阅并选择批准或拒绝；将 `PROPOSAL_ID` 替换为实际值，允许程序必须与提案一致：
+
+```powershell
+uv run pi-agent command show PROPOSAL_ID --database .\sessions.sqlite
+uv run pi-agent command approve PROPOSAL_ID --database .\sessions.sqlite --workspace .\safe-workspace --allow-executable python
+# 或拒绝该提案：
+uv run pi-agent command reject PROPOSAL_ID --database .\sessions.sqlite
+```
+
+`approve` 展示准确 argv，并要求手工输入确认文本。已消费的提案不会在崩溃后自动重放。详见 [M8 接线与边界](docs/acceptance/M8-closure.md)。
+
+</details>
+
+<details>
+<summary>本机服务端与客户端</summary>
+
+先准备上述 `safe-workspace`。在服务端终端设置共享令牌并启动服务，将示例令牌替换为自行生成的长随机值：
+
+```powershell
+$env:PI_AGENT_REMOTE_TOKEN = "replace-with-a-long-random-local-token"
+uv run pi-agent-server --provider fake --workspace .\safe-workspace --database .\remote-sessions.sqlite --port 8765
+```
+
+另开终端，进入项目根目录并设置相同令牌，然后创建会话；将后续命令中的 `SESSION_ID` 替换为返回的 ID：
+
+```powershell
+$env:PI_AGENT_REMOTE_TOKEN = "replace-with-a-long-random-local-token"
+uv run pi-agent-client --port 8765 create
+uv run pi-agent-client --port 8765 prompt --session-id SESSION_ID --text "hello"
+uv run pi-agent-client --port 8765 snapshot --session-id SESSION_ID
+```
+
+每个客户端命令输出一份 JSON 快照。fake 服务端用于确定性演示；真实模型需要在服务端显式加载 `.env` 并选择 `--provider compatible`。服务端持有工作区、模型和数据库，客户端只发送会话命令。两端仅连接 `127.0.0.1`，不提供公网部署保障；令牌仅从环境变量读取。见 [M10 设计](docs/design/M10.md)。
+
+</details>
+
+<a id="configuration"></a>
+
+## ⚙️ 配置说明
+
+### 模型配置
+
+创建本地配置文件（仅首次执行，避免覆盖已有配置）：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env.example` 只记录变量说明。在 `.env` 中填入实际配置，以下仅为占位示例：
 
 ```dotenv
 PI_AGENT_PROVIDER=compatible
 PI_AGENT_MODEL=your-model-id
 PI_AGENT_BASE_URL=https://provider.example/v1
-PI_AGENT_API_KEY=your-secret
+PI_AGENT_API_KEY=replace-with-your-api-key
 ```
 
-`PI_AGENT_BASE_URL` is the API root; the client appends `/chat/completions`.
-Never commit `.env`, and do not include `/chat/completions` in the base URL.
-Configuration is loaded only when explicitly requested:
+| 环境变量 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `PI_AGENT_PROVIDER` | `fake` | 模型配置解析器的默认 provider；CLI 运行真实模型仍需显式传 `--provider compatible` |
+| `PI_AGENT_MODEL` | 无 | compatible 必填，服务商支持的模型 ID |
+| `PI_AGENT_BASE_URL` | 无 | compatible 必填，API 根地址；客户端追加 `/chat/completions` |
+| `PI_AGENT_API_KEY` | 无 | compatible 使用的密钥，只保存在本地环境中 |
+| `PI_AGENT_API_KEY_ENV` | `PI_AGENT_API_KEY` | 自定义密钥变量名称 |
+| `PI_AGENT_TIMEOUT_SECONDS` | `30` | 单次请求时限，正数秒 |
+| `PI_AGENT_MAX_ATTEMPTS` | `3` | 最大尝试次数，含首次请求 |
+| `PI_AGENT_RUN_TIMEOUT_SECONDS` | `120` | 整轮运行时限，正数秒 |
+| `PI_AGENT_REMOTE_TOKEN` | 无 | 本机 TCP 服务端 / 客户端必填共享令牌 |
+| `PI_AGENT_LIVE` | 未启用 | 仅在显式执行真实服务测试时设为 `1` |
+
+**加载规则**：普通命令通过 `uv run --env-file .env ...` 显式加载；`start-web.ps1 -Provider compatible` 自动读取项目根目录 `.env`。文件存在本身不会让默认 fake CLI 访问模型。`.env` 已被 Git 忽略，请勿提交密钥；`PI_AGENT_BASE_URL` 不要再附加 `/chat/completions`。
+
+### 工作区、数据与项目规则
+
+| 配置项 | 位置 / 行为 |
+| :--- | :--- |
+| Web 数据库 | 默认 `~/.pi-agent/web.sqlite`；可用脚本 `-Database` 或 Web CLI `--database` 指定，必须在工作区之外 |
+| CLI 数据库 | 通过 `--database` 指定；同一数据库 + 会话 ID 用于后续对话 |
+| Web 工作区 | 启动时 `-Workspace` / `--workspace` 指定，页面设置可更换；已有会话保留原工作区 |
+| Web 项目指令 | 工作区中的 `PI-AGENTS.md`，见 [格式与发现规则](docs/pi-agents.md) |
+| CLI / TCP 项目指令 | 沿用 `AGENTS.md` 上下文管线；与 Web 的规则文件区分 |
+
+不要让独立 CLI / TCP 进程与 Web 同时驱动同一数据库。`.env`、`.git`、私钥和运行缓存等敏感路径会被 provider 可见的只读工具排除。
+
+<a id="help"></a>
+
+## 📚 文档与求助入口
+
+### 从运行到理解实现
+
+| 想了解什么 | 阅读入口 |
+| :--- | :--- |
+| 项目定位、代码地图与学习方式 | [AGENTS.md](AGENTS.md) |
+| 当前进度、里程碑与未关闭事项 | [PLAN](PLAN.md) |
+| 全部文档与阶段索引 | [文档导航](docs/README.md) |
+| Web 开发、启动、测试和运行边界 | [Web UI](docs/web-ui.md) |
+| 项目指令如何影响工作台 | [PI-AGENTS.md 规范](docs/pi-agents.md) |
+| 学习过程与设计决策 | [学习日志](LEARNING_LOG.md) |
+| 完整请求链路与架构复盘 | [M11 设计](docs/design/M11.md) · [M11 架构](docs/architecture/M11.md) |
+| 验收结果与真实模型记录 | [M11 验收](docs/acceptance/M11.md) · [真实模型手工验证](docs/acceptance/M11-real-provider-manual.md) |
+| 后置环境与部署验证 | [后置验证记录](docs/history/2026-09-28-m11-deferred-deployment-validation.md) |
+
+学习时先看完整链路，再跟踪一个“读取文件”的请求，最后结合源码与验收记录理解各模块的协作。`docs/history/` 用于追溯历史，当前状态以 `PLAN.md` 为准。
+
+### 常见问题
+
+<details>
+<summary>没有 API Key，可以体验吗？</summary>
+
+可以。默认 Web 是离线演示，可调用真实 `read` / `list` 工具；默认 CLI 返回确定性的 `fake reply`。真实模型分析需要配置 compatible。
+
+</details>
+
+<details>
+<summary>为什么读不到 probe.txt，或者找不到 telemetry.jsonl？</summary>
+
+先创建 `--workspace` 指向的目录，并把 `probe.txt` 放在其中。工具路径相对于工作区解析；`--telemetry-file telemetry.jsonl` 也写在工作区内。参考上方完整 CLI 示例。
+
+</details>
+
+<details>
+<summary>为什么 Web 页面没有加载，或端口被占用？</summary>
+
+新 checkout 没有前端构建产物，先运行 `start-web.ps1`，或按手工步骤执行 `npm ci` 与 `npm run build`。端口占用时使用 `-Port 8767`，然后访问对应本机地址。构建失败时先检查 Python、Node.js 和 uv 版本。
+
+</details>
+
+<details>
+<summary>能自动修改文件、执行命令或部署到公网吗？</summary>
+
+当前 Web 提供只读工具，没有文件写入或命令审批入口。CLI 的命令执行需要允许列表、持久化提案与人工批准。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；相关验证边界见验收文档。
+
+</details>
+
+### 开发与验证
 
 ```powershell
-uv run --env-file .env python -c "import os; from pi_agent.models.config import ModelOptions, resolve_model_config; print(resolve_model_config(ModelOptions(), dict(os.environ)).public_dict())"
+uv sync --all-extras
+uv run pytest -q --basetemp=.pytest-tmp
+uv run mypy src tests
+uv run ruff check .
+uv run ruff format --check .
 ```
 
-The default suite remains offline. Live smoke is opt-in and uses only synthetic
-prompts plus temporary workspaces/databases:
+默认测试离线运行；Web 前端与浏览器测试命令见 [Web UI 文档](docs/web-ui.md)。
+
+<details>
+<summary>可选：真实 Provider smoke（会访问已配置的模型服务）</summary>
 
 ```powershell
-$env:PI_AGENT_LIVE="1"
+$env:PI_AGENT_LIVE = "1"
 uv run --env-file .env pytest tests/live/test_provider_smoke.py -m live -q --basetemp=.pytest-tmp-m8-live
 Remove-Item Env:PI_AGENT_LIVE
 ```
 
-The smoke module covers a normal reply, native streaming, SQLite reopen/resume,
-and the summary/compaction path. Passing it proves the configured endpoint's
-basic protocol integration, not summary quality or compatibility with every
-OpenAI-compatible provider.
+覆盖普通回复、原生流、SQLite 重开 / 续聊以及摘要压缩路径。通过仅说明所配置服务的基本协议集成可用，不代表所有 compatible 服务或摘要质量均已验证。
 
-Use a dedicated workspace containing only material you are comfortable sending
-to the configured model. `--database` must point to a file in an existing
-directory; `--session-id` chooses the durable conversation. `--trace-file` is
-optional and writes content-free event/usage metadata inside the workspace.
+</details>
 
-```powershell
-uv run --env-file .env pi-agent --provider compatible --workspace .\safe-workspace --database .\sessions.sqlite --session-id demo --prompt "Read probe.txt and summarize it" --events jsonl --trace-file trace.jsonl
-uv run pi-agent session list --database .\sessions.sqlite
-```
+遇到问题请先查看上方常见问题与对应文档，再到 [GitHub Issues](https://github.com/Jaysonxiao/pi-agent-langGraph/issues) 检索或 [提交问题](https://github.com/Jaysonxiao/pi-agent-langGraph/issues/new)。建议附上系统和运行时版本、执行命令、预期结果与脱敏错误信息；不要提交 `.env`、API Key 或私有文件正文。
 
-Sensitive file names such as `.env`, `.git`, private keys, and runtime caches are
-excluded from provider-visible read/search tools. This is not an OS sandbox:
-place untrusted tasks in an isolated workspace. By default no command can run.
-To let the model *propose* an allowlisted command, pass `--allow-executable`;
-this still does not execute it. Review the exact argv with `pi-agent command
-show ID --database DB`, then use the interactive `command approve` or `command
-reject` subcommand. A consumed proposal is never automatically replayed after
-a crash. The provider CLI emits completed messages and graph events; token-by-token
-terminal rendering is not yet a guarantee.
+## 开源协议
 
-## M10 local remote-session entry points
-
-M10 adds loopback-only authenticated server and client commands. The server owns
-the workspace, provider configuration, and SQLite database; clients send only
-session commands. Set `PI_AGENT_REMOTE_TOKEN` in the environment for both
-processes. The token is required and is never accepted as a command-line option.
-
-```powershell
-$env:PI_AGENT_REMOTE_TOKEN = "use-a-long-random-local-token"
-uv run pi-agent-server --provider fake --workspace .\safe-workspace --database .\sessions.sqlite --port 8765
-```
-
-In another terminal with the same token, create a session and send one prompt:
-
-```powershell
-uv run pi-agent-client --port 8765 create
-uv run pi-agent-client --port 8765 prompt --session-id SESSION_ID --text "Read probe.txt and summarize it"
-uv run pi-agent-client --port 8765 snapshot --session-id SESSION_ID
-```
-
-The client writes one JSON snapshot per command. The default server provider is
-fake and deterministic; choose `--provider compatible` only when provider
-configuration is explicitly set. Both entry points bind/connect only to
-`127.0.0.1`; this milestone does not claim external-network deployment safety.
-
-## M11 guided acceptance work
-
-The guided exercise connected successful tool hooks to eval verdicts. See the
-[request flow](docs/design/M11.md), [architecture review](docs/architecture/M11.md),
-and [actual verification results](docs/acceptance/M11.md). The
-`eval --suite tools --provider fake` suite runs real list/read tools in a
-temporary workspace and checks observed tool calls. M11 also adds opt-in
-compatible CLI telemetry and a local fake performance baseline. Windows and
-Ubuntu CI jobs are configured, but neither has a recorded runner result yet.
-The [real-provider manual acceptance cases](docs/acceptance/M11-real-provider-manual.md)
-cover the public CLI and loopback server/client from a user's perspective.
-The [deferred deployment record](docs/history/2026-09-28-m11-deferred-deployment-validation.md)
-tracks independent environment and service validation for later execution.
-
-For an explicitly configured compatible-provider run, content-free spans,
-lifecycle metrics and structured logs can be appended inside the workspace:
-
-```powershell
-uv run --env-file .env pi-agent --provider compatible --workspace .\safe-workspace --database .\sessions.sqlite --session-id demo --prompt "Read probe.txt and summarize it" --telemetry-file telemetry.jsonl --events jsonl
-```
-
-Telemetry is opt-in. The JSONL file excludes prompt and message bodies and is
-subject to the workspace path policy. The local append sink is intended as a
-small CLI adapter, not a high-throughput or multi-process telemetry backend.
+本项目采用 [MIT License](LICENSE)。项目设计参考 [Pi Agent](https://github.com/earendil-works/pi)；上游项目另有自己的 [MIT 协议与版权声明](https://github.com/earendil-works/pi/blob/main/LICENSE)。
