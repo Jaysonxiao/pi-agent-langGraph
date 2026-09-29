@@ -2,10 +2,10 @@
 
 ## 当前快照
 
-- 更新日期：2026-09-28；时区：Asia/Shanghai。
+- 更新日期：2026-09-29；时区：Asia/Shanghai。
 - 学习者基础：具备 Python 基础，学习过 LangChain/LangGraph 常规用法；目标是能独立设计、实现和审查 Agent 系统。
 - 进度：M0–M10 已按各自交付范围归档。M10 离线本机范围于 2026-09-28 完成归档复验，组合 **133 passed**、全仓非 live **565 passed、4 deselected**；范围和遗留见 [M10 归档](docs/acceptance/M10.md)。M8 的跨平台/真实故障注入与 M9 的 live/default CLI 边界仍按各自记录跟踪。
-- 当前练习：用户于 2026-09-28 授权启动 M11，并选择保留一个核心练习。学习者已完成 M11.1 `collect_tool_names()`；M11.1–M11.4 本地实现与验证已完成。用户授权将新环境 Windows/Linux 与真实服务部署验证后置，当前按[真实模型手工用例](docs/acceptance/M11-real-provider-manual.md)回顾并等待验收；M11 暂保持 in_progress。详细范围以 [PLAN](PLAN.md) 为准。
+- 最近里程碑：M11 于 2026-09-29 按本地交付范围完成用户验收并归档。M11.1 的学习者练习 `collect_tool_names()` 已完成；M11.1–M11.4、本机 compatible 手工场景和 4 项 live tests 均有记录。新环境 Windows/Linux 与真实服务部署验证保留为后置 D1–D3；真实请求对应的 telemetry 文件脱敏检查及配置投影输出没有单独留存。详细结论以 [PLAN](PLAN.md) 和 [M11 归档](docs/acceptance/M11.md) 为准。
 - 当前能力：默认 fake CLI 仍使用无持久化最小图；显式 compatible CLI 已连通异步只读工具图、受控模型重试/时限、SQLite 会话与节点事件。命令仅能由模型提案，再由人审入口执行；文件写入仍是独立 M4 审批边界。完整闭环、证据和限制见 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 - 状态唯一来源：[PLAN.md](PLAN.md)。本日志只总结学习和决策；旧过程流水见 [整理前快照](docs/history/2026-09-18-before-m5-archive/README.md)。
 
@@ -26,7 +26,7 @@
 | M8 | 2026-09-22 至 2026-09-24 | 2026-09-23 首次归档；2026-09-24 端到端纠正及真实服务复验 | compatible provider/异步组件/公开 CLI 只读闭环；部分跨平台和质量复验保留 |
 | M9 | 2026-09-24 | 2026-09-24 已交付范围归档 | 最终组合范围 28 passed；mypy 203 个文件、Ruff 与 fake eval CLI 通过；live 与默认 CLI telemetry 边界保留 |
 | M10 | 2026-09-24 启动；2026-09-28 完成 M10.4–M10.8 | 2026-09-28 用户条件授权后离线本机范围归档 | 133 项组合、565 项非 live 回归通过；4 项 live 未运行，边界保留 |
-| M11 | 2026-09-28 启动；M11.1–M11.4 已实现 | 尚未全阶段验收或归档 | 本地门禁已完成；真实模型手工用例待用户运行，三项部署/环境验证经用户授权后置 |
+| M11 | 2026-09-28 启动；2026-09-29 本地范围归档 | completed（本地交付范围） | compatible read/session/isolation/path/remote restart 与 4 项 live tests 有用户实测；D1–D3 后置；telemetry 实际文件手工脱敏查询未留存 |
 
 阶段测试数是当时证据：M1 全仓 1、M2 全仓 9、M3 全仓 22、M4 当时全仓 76；M4 重验范围为 53；2026-09-18 全仓为 116、M5 范围为 40；2026-09-21 闭合复验全仓为 123、M5 范围为 47。这些数字对应不同时间和范围，不能混写为同一轮验证。
 
@@ -288,9 +288,9 @@ Python composition root 把 server-owned model、workspace、SQLite catalog、co
 
 **设计重点、未决边界与下一步**：session ID/data 由 server catalog/checkpoint 持有，client 只传业务命令；重启换 server epoch，但 SQLite checkpoint 延续。fake server 模型固定发起 `read(probe.txt)` 再给 deterministic summary，只为离线组合验收，不证明真实模型质量。完成与取消相遇时，以 `task.done()` 的事实防止将已完成 run 误报取消；进程日志检查覆盖服务端 stdout/stderr，客户端 stdout/stderr 检查 token。关机超时必须向上报告失败，不能把仍在运行的 handler 当作已回收。外网、跨进程 lease/exactly-once、真实 compatible 模型质量与 M11 threat/performance audit 仍是范围外事项。M10 已按已交付范围归档，下一步由用户决定是否启动 M11。
 
-## M11 — 全链路验收与架构复盘（进行中）
+## M11 — 全链路验收与架构复盘（已归档：本地交付范围）
 
-启动日期：2026-09-28；用户验收与归档均未发生。本轮用户明确选择“保留一个核心练习，按引导式推进”，由学习者完成 M11.1 核心轨迹投影；随后按计划推进剩余切片。教学见 [M11 设计](docs/design/M11.md)，架构复盘见 [M11 架构](docs/architecture/M11.md)，命令结果统一记录在 [M11 验收](docs/acceptance/M11.md)。
+启动日期：2026-09-28；2026-09-29 用户验收并归档本地交付范围。用户选择“保留一个核心练习，按引导式推进”，由学习者完成 M11.1 核心轨迹投影；随后按计划推进剩余切片。教学见 [M11 设计](docs/design/M11.md)，架构复盘见 [M11 架构](docs/architecture/M11.md)，结果统一记录在 [M11 归档](docs/acceptance/M11.md) 与[真实模型手工执行记录](docs/acceptance/M11-real-provider-manual.md)。
 
 从整体看，已有链路是入口 → session/thread → 上下文 → model/tools 循环 → SQLite → 事件/快照。M11 加的是验收证据：同一“读取 probe.txt 并总结”必须同时证明工具真的返回、结果回灌、终态完成和观察轨迹正确。仅有 assistant tool call 或完成状态不够。M9 原 `_tool_names()` 猜测 StreamEvent 中存在 `tool_names/tool_name`，实际通用更新投影不提供这些字段；原 smoke 没有工具，无法揭示这个缺口。
 
@@ -306,9 +306,11 @@ M11.2 已实现公开 compatible CLI telemetry opt-in：`--telemetry-file` 使�
 
 M11.3 复盘与决策：性能脚本启动 loopback authenticated client/server，以 fake model 实际发起只读 read 工具；预热 1 次、测量 5 次，记录 OS/Python 和 min/median/p95/max/mean。2026-09-28 Windows 11 / Python 3.13.5 的样本 median 为 53.115 ms、p95 为 55.049 ms；样本量小，仅作可复现本机参考，不是 SLA。全量 tracemalloc warnings-as-errors 复测定位出 `tests/sessions/test_metadata.py` 与 `test_metadata_recovery.py` 三处连接创建；SQLite connection 的 context manager 管事务但不会自动 close，修复为 `contextlib.closing` 外包原 transaction context。CI 已配置 Ubuntu/Windows × Python 3.11/3.12，但未取得任一新环境 runner 的实际结果。
 
-M11.4 已补齐全链路架构图、Pi 源码因果映射、LangGraph/checkpointer 与应用生命周期边界、资产/威胁/现有控制/责任人表、生产差距、陌生 Agent 源码分析步骤和架构评审 checklist，见 [M11 架构复盘](docs/architecture/M11.md)。最终验证后停止等待用户验收；Windows/Ubuntu CI jobs 成功结果仍是外部证据缺口。真实模型质量、公网部署安全、跨进程 exactly-once 仍不由 fake 验收证明。
+M11.4 已补齐全链路架构图、Pi 源码因果映射、LangGraph/checkpointer 与应用生命周期边界、资产/威胁/现有控制/责任人表、生产差距、陌生 Agent 源码分析步骤和架构评审 checklist，见 [M11 架构复盘](docs/architecture/M11.md)。本地门禁完成后于 2026-09-29 由用户验收并归档本地交付范围；Windows/Ubuntu 新环境 CI job 仍无成功结果。真实模型质量、公网部署安全、跨进程 exactly-once 仍未由本次验收证明。
 
-后续范围决定（2026-09-28）：用户当前只有本地开发环境，因此将新环境 Windows、新环境 Linux 与真实服务部署验证记为三项待修复的验证遗留，详见 [历史决定记录](docs/history/2026-09-28-m11-deferred-deployment-validation.md)。延期不等于通过，原 M11 标准保留。为当前项目回顾新增[真实模型手工验收用例](docs/acceptance/M11-real-provider-manual.md)：从用户公开入口检查 `compatible` 模型、真实 `read` 工具与 Hook 轨迹、SQLite 会话隔离、telemetry、本机远程 server/client 与重启；4 项 opt-in live tests 补充流式/压缩证据。设计决策是将“模型答对”与“工具实际执行”分开判定，将本机真实模型结果与未来部署环境结果分开记录。当前没有执行用户手工用例，下一步由用户在自己的兼容端点上记录实际结果，再决定本地已交付范围的验收与归档。
+用户实测与归档（2026-09-29）：compatible CLI 的实际 `read` 返回 `M11-PROBE-001` 并完成回答；同一 SQLite 会话在文件更新后回忆旧 marker，新 session 未继承旧轮次；错误相对路径的首次测试只证明目标不存在，不能证明 confinement，修正为 `../out-workspace/outside.txt` 后实际 read 收到 `Resolved path is outside the workspace root.`；本机 server/client 的 `create → prompt/read → snapshot` 成功，服务端重启后 epoch 改变而同 session、checkpoint 和 4 条消息保留。`tests/live/test_provider_smoke.py` 用户运行结果为 **4 passed in 8.14s**。这些结果支持当前 Windows 本机和该 compatible 端点，不外推到部署环境或其他模型。真实 telemetry JSONL 的 marker/prompt/API key 检查和用例 0 的独立配置投影未见用户输出，因此保留为未单独核实的证据点；代码层的 telemetry redaction tests 已通过。
+
+归档边界：新环境 Windows、新环境 Linux、目标部署环境的真实服务验证仍为 D1–D3，延期不等于通过，未来须分别取得环境/部署实测证据。同步 JSONL 写入的负载、轮转、跨进程写协调，远程公网安全、跨进程 lease/exactly-once 和副作用工具也没有被本次本地验收关闭。
 
 ## 关键决策
 

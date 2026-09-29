@@ -6,7 +6,7 @@
 - M0–M8 已按各自交付范围归档。M8 于 2026-09-23（Asia/Shanghai）首次归档；2026-09-24 补齐真实 Provider CLI 只读闭环、重试/时限、命令人审入口，并在配置的 compatible 服务完成 4 个 live smoke 与合成文件 CLI 工具调用。初次归档与后续复验分列于 [M8](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md)。M8.3/M8.4 及 R2-D–R2-F 由助手代写，学习者复盘另行进行。
 - M9 于 2026-09-24 启动、完成已交付范围并归档。用户报告最终组合测试 **28 passed**、mypy **203 source files**、Ruff lint/format 与 fake eval CLI 通过；默认 CLI telemetry、带工具调用的 CLI eval 和可选 live eval 的边界见 [M9 归档](docs/acceptance/M9.md)。
 - M10 于 2026-09-24 按用户要求启动；2026-09-28 完成全部切片和归档复验，并按用户本轮授权归档已交付的离线本机范围。验收证据、非目标和未关闭边界见 [M10 归档](docs/acceptance/M10.md)。
-- M11 于 2026-09-28 获用户授权启动；用户选择保留一个核心练习、按引导式推进。M11.1/M11.2 和 M11.3 本地验证、M11.4 复盘已实现；用户同意将新环境 Windows/Linux 与真实服务的部署验证后置为遗留项，不能据此宣称它们通过。当前等待按 [真实模型手工用例](docs/acceptance/M11-real-provider-manual.md) 回顾和用户验收；范围决定见 [遗留历史记录](docs/history/2026-09-28-m11-deferred-deployment-validation.md)，实际证据见 [M11 验收记录](docs/acceptance/M11.md)。
+- M11 于 2026-09-28 获用户授权启动，并于 2026-09-29 按本地交付范围验收归档。M11.1–M11.4、本机真实 compatible 用例和 4 项 live tests 已有结果；新环境 Windows/Linux、真实服务部署验证仍是经用户授权后置的 D1–D3，未宣称通过。实际证据与边界见 [M11 验收记录](docs/acceptance/M11.md) 和 [真实模型手工执行记录](docs/acceptance/M11-real-provider-manual.md)。
 - M5 同步取消与 M8 异步组件、主请求取消接线已分别验证；真实传输中取消、429 故障注入和跨平台进程树仍按 [剩余清单](docs/follow-ups/M1-M8.md) 单列，不扩大现有 smoke 结论。
 
 | 文件 | 唯一职责 |
@@ -15,7 +15,7 @@
 | PLAN.md | 当前状态、里程碑范围、验收要求、阶段接口 |
 | LEARNING_LOG.md | 学习者基础、按里程碑总结、关键决策、问题索引 |
 | docs/acceptance/Mx.md | 对应里程碑的验收命令、结果、局限和归档结论 |
-| docs/README.md | M1–M10 文档索引；审计、总结与后续任务入口 |
+| docs/README.md | M1–M11 文档索引；审计、总结与后续任务入口 |
 | docs/history/ | 已封存的过程记录；不能作为当前任务清单 |
 
 状态取值为 `pending / in_progress / completed / blocked`；最多一个 `in_progress`，阶段间允许为零。归档只证明对应验收文件声明的范围，不能把教学范围扩张成生产能力。
@@ -33,7 +33,7 @@
 | M8 | 模型适配、重试、取消与容错 | completed | 增强 | 2026-09-23 首次归档；2026-09-24 接线纠正与真实 provider 复验；[M8 归档](docs/acceptance/M8.md)、[纠正记录](docs/acceptance/M8-closure.md) |
 | M9 | 扩展、可观测性与评测 | completed | 生产化 | [M9 归档](docs/acceptance/M9.md)，2026-09-24 已交付离线范围验收；未关闭边界保留 |
 | M10 | 远程协议与客户端/服务端 | completed | 已选择的可选扩展 | [M10 归档](docs/acceptance/M10.md)，2026-09-28 离线本机范围验收；[设计](docs/design/M10.md) |
-| M11 | 全链路验收与架构复盘 | in_progress | 收束 | 2026-09-28 启动；M11.1–M11.4 本地工作已完成，真实模型手工验收待执行；新环境/部署验证经用户授权后置；[M11](docs/acceptance/M11.md) |
+| M11 | 全链路验收与架构复盘 | completed | 收束 | 2026-09-29 本地交付范围用户验收并归档；D1–D3 新环境/部署验证仍后置；[M11 归档](docs/acceptance/M11.md) |
 
 日期规则：实现/学习日期、验收日期、归档日期、复验日期分别记录；历史测试数只代表对应阶段。未经核对的具体时间不补写。M5 子练习统一归入 M5，不再追加在 M4 标题下。
 
@@ -97,7 +97,7 @@ docs/acceptance/ # 每个里程碑的验收记录
 
 ## 5. 里程碑契约
 
-每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；M11 进行中，后续切片的计划命令不能当作已经执行或通过。
+每项固定保留目标、范围、非目标、交付物、验收标准、验证命令。已完成项的事实与局限见归档；当前没有进行中的里程碑。后续切片的计划命令不能当作已经执行或通过。
 
 ### M0 — 源码分析与路线设计
 
@@ -374,8 +374,8 @@ M10.5 于 2026-09-28 完成。学习者实现 `SessionCoordinator.try_claim_run(
 |---|---|---|
 | M11.1 工具评测证据 | `cli/eval.py`、`cli/eval_tools.py`、`evals/tool_trace.py`、`tests/evals`；真实临时 list/read、SQLite、hook → observation → judge → 安全报告 | completed：学习者完成 `collect_tool_names()`；11 项 eval 测试和 tools CLI 1/1 通过 |
 | M11.2 CLI 可观测性接线 | `cli/app.py`、`cli/telemetry.py`、`telemetry/jsonl.py`、`tests/cli` 和 sink tests；显式启用、工作区路径、关闭/失败隔离 | completed：compatible CLI `--telemetry-file` 公开入口验证 span/metric/log、脱敏、资源关闭和 opt-in；45 项相关回归通过 |
-| M11.3 跨平台与性能证据 | `.github/workflows/ci.yml`、公开入口/进程树测试、可重复基线脚本和 `docs/acceptance/M11.md` | 本地 Windows 验证已完成；新环境 Windows/Linux runner 实测经用户授权后置，性能值是本机参考样本 |
-| M11.4 全局复盘与交付 | README、`docs/architecture/M11.md`、威胁模型、验收矩阵、生产差距及源码/架构检查清单 | 本地文档及门禁已完成；真实模型手工用例已提供，等待用户执行、审查与验收 |
+| M11.3 跨平台与性能证据 | `.github/workflows/ci.yml`、公开入口/进程树测试、可重复基线脚本和 `docs/acceptance/M11.md` | completed（本地范围）：Windows smoke 与性能参考样本完成；新环境 Windows/Linux runner 实测按用户授权列入 D1/D2 后置 |
+| M11.4 全局复盘与交付 | README、`docs/architecture/M11.md`、威胁模型、验收矩阵、生产差距及源码/架构检查清单 | completed（本地范围）：文档、门禁及 2026-09-29 用户真实模型回顾已归档；D1–D3 仍按后置记录保留 |
 
 M11.1 验证：`uv run pytest tests/evals -q --basetemp=.pytest-tmp-m111`；`uv run pi-agent eval --suite smoke --provider fake`；`uv run pi-agent eval --suite tools --provider fake`；`uv run mypy src tests`；`uv run ruff check .`；`uv run ruff format --check .`。完整 M11 原验证命令保持不变，pytest 可增加独立 `--basetemp` 以避免临时目录干扰。
 
@@ -385,9 +385,9 @@ M11.2 验证：`uv run pytest tests/telemetry tests/cli tests/integration/test_t
 
 M11.2 实现：默认关闭 telemetry；compatible provider 仅在显式指定 workspace 内目标时挂接 hook。追加式 JSONL sink 实现 span/metrics/structured-log 三个 port，写入前统一脱敏，span start/end 使用同 trace parent；metrics 只记录 phase/outcome 低基数字段。HookRegistry 隔离普通 sink 异常，provider `finally` 仍关闭 client。公开入口以合成模型客户端、真实只读 read ToolMessage、真实 SQLite/graph 验证；未触网，也未实例化真实服务商 SDK。文件追加是同步本地 IO；大吞吐、轮转、跨进程写协调及 telemetry 故障诊断仍属生产差距，不作性能保证。完整范围见 [M11 验收](docs/acceptance/M11.md)。
 
-M11.3 本地 Windows 验证已完成；M11.4 架构复盘文档已完成。SQLite warning 的 traceback 指向三个测试中使用 SQLite connection context manager 的位置，已改为显式 `closing()` 并保留 transaction context；全量 `-W error::ResourceWarning` 复测结果：**579 passed、4 skipped**。新环境 Windows/Linux 与真实服务部署验证仍无实测证据，已按用户决定登记为后置遗留；当前用户视角的真实模型本机用例尚待执行。
+M11.3 本地 Windows 验证已完成；M11.4 架构复盘文档已完成。SQLite warning 的 traceback 指向三个测试中使用 SQLite connection context manager 的位置，已改为显式 `closing()` 并保留 transaction context；全量 `-W error::ResourceWarning` 复测结果：**579 passed、4 skipped**。2026-09-29 用户完成本机 compatible 工具调用、会话恢复/隔离、路径越界拒绝、本机 server/client 重启恢复及 4 项 live tests（**4 passed**），并授权归档 M11 本地范围。手工记录指出 telemetry 文件的 marker/prompt/API key 查询及配置投影输出未单独留存；实现级脱敏测试结果仍见验收记录。新环境 Windows/Linux 与真实服务部署验证无实测证据，按用户决定登记为 D1–D3 后置遗留。
 
-环境与风险：正常权限执行 `uv sync --all-extras` 已通过；沙箱默认 uv cache 曾拒绝访问。WSL 只列出 `docker-desktop`，Docker engine 未运行，Linux smoke 尚无证据。三个 SQLite connection warning 已按 allocation traceback 定位并修复，warnings-as-errors 全量测试通过。M11 保持 `in_progress` 等待用户填写真实模型手工结果；后置项未来须以独立环境/部署实测关闭。
+环境与风险：正常权限执行 `uv sync --all-extras` 已通过；沙箱默认 uv cache 曾拒绝访问。WSL 只列出 `docker-desktop`，Docker engine 未运行，Linux smoke 尚无证据。三个 SQLite connection warning 已按 allocation traceback 定位并修复，warnings-as-errors 全量测试通过。M11 本地交付范围已完成并归档；D1–D3 未来须以独立环境/部署实测关闭，M11 归档不替代这些证据。
 
 ## 6. 范围接口与执行规则
 

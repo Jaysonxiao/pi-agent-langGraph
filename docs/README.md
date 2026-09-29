@@ -11,7 +11,7 @@
 | 优先级、依赖、完成标准 | [后续开发清单](follow-ups/M1-M8.md) | 初次归档问题基线与 2026-09-24 纠正后的 M8 剩余复验；M9 未关闭边界见其归档文件 |
 | 当前使用和配置 | [README](../README.md) | 可执行命令和 CLI/Provider 限制 |
 | M10 远程接入设计与练习 | [M10 设计](design/M10.md) | 系统链路、Pi 源码映射、M10.1–M10.4 复盘；切片状态与验证命令仍由 PLAN 管理 |
-| M11 全链路收束、架构复盘与验收 | [M11 设计](design/M11.md)、[M11 架构](architecture/M11.md)、[M11 验收](acceptance/M11.md)、[真实模型手工用例](acceptance/M11-real-provider-manual.md) | M11.1–M11.4 当前证据；用户视角真实模型回顾待执行 |
+| M11 全链路收束、架构复盘与验收 | [M11 设计](design/M11.md)、[M11 架构](architecture/M11.md)、[M11 归档](acceptance/M11.md)、[真实模型手工执行记录](acceptance/M11-real-provider-manual.md) | 2026-09-29 本地交付范围已验收归档；D1–D3 与两项未单独留存的手工证据仍明确保留 |
 | M11 后置验证决定 | [遗留历史记录](history/2026-09-28-m11-deferred-deployment-validation.md) | 新环境 Windows/Linux、真实服务部署验证经用户授权后置；不视为通过 |
 | 原始教学过程 | [2026-09-23 整理前快照](history/2026-09-23-m1-m8-review/INDEX.md) | 留存红灯、旧状态与长篇设计记录 |
 
@@ -29,6 +29,6 @@
 | M8 Provider 与异步组件 | [M8 初次归档](acceptance/M8.md)、[端到端纠正](acceptance/M8-closure.md) | [HTTP](../src/pi_agent/models/http_client.py)、[Provider CLI](../src/pi_agent/cli/runtime.py)、[live gate](../tests/live/test_provider_smoke.py) |
 | M9 扩展、可观测性与评测 | [M9 归档](acceptance/M9.md) | [hooks](../src/pi_agent/extensions/hooks.py)、[lifecycle spans](../src/pi_agent/telemetry/lifecycle.py)、[eval harness](../src/pi_agent/evals/harness.py)、[集成测试](../tests/integration/test_telemetry_lifecycle.py) |
 | M10 远程协议与客户端/服务端 | [M10 归档](acceptance/M10.md)，2026-09-28 已交付离线本机范围验收；[设计与复盘](design/M10.md)、[分片计划](../PLAN.md) | protocol/server/client 组合 133 passed；全仓非 live 565 passed |
-| M11 全链路验收与架构复盘 | [进行中记录](acceptance/M11.md)、[单一练习](design/M11.md)、[架构复盘](architecture/M11.md)、[手工用例](acceptance/M11-real-provider-manual.md) | 本地自动验证完成；真实模型手工用例待执行，环境/部署验证后置 |
+| M11 全链路验收与架构复盘 | [归档记录](acceptance/M11.md)、[单一练习](design/M11.md)、[架构复盘](architecture/M11.md)、[真实模型执行记录](acceptance/M11-real-provider-manual.md) | 本地范围已验收归档；独立环境与部署验证仍后置 |
 
 术语统一：**归档**表示已交付范围结案；**验收通过**只指该记录中明确执行的范围；**待核实**表示证据不足，不能推断通过；**历史快照**仅作追溯。实现、验收、归档和复验日期分别记，不把一次较晚复验回填到更早里程碑。

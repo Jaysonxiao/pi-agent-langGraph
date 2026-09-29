@@ -1,6 +1,6 @@
-# M11 真实模型用户验收用例（待执行）
+# M11 真实模型用户验收用例与执行记录
 
-本文件供使用者在**当前本机**逐步操作和填写结果。所有 Agent 请求均显式选择 `compatible`，使用你配置的真实 OpenAI-compatible 端点；本文件没有 fake model 用例。M11 原有自动化结果见 [验收记录](M11.md)，部署环境遗留见 [后置验证记录](../history/2026-09-28-m11-deferred-deployment-validation.md)。下面的命令和预期依据公开 CLI、`.env.example` 及 `tests/live/test_provider_smoke.py`；尚未替你执行，也没有真实服务通过结论。
+本文件记录用户于 2026-09-29 在 Windows 本机执行的公开 CLI 和 live-provider 验证。Agent 请求显式使用 `compatible`，连接用户配置的真实 OpenAI-compatible 端点；这些结果不代表其他服务商、部署网络或生产环境通过。M11 自动化结果见 [验收记录](M11.md)，后置环境/部署验证见 [后置验证记录](../history/2026-09-28-m11-deferred-deployment-validation.md)。
 
 | 本次用户可见验证 | 对应开发阶段 |
 |---|---|
@@ -154,17 +154,17 @@ try {
 
 记录通过/失败/跳过数。若仍有 skip，检查 `PI_AGENT_LIVE` 是否在测试进程环境中；不能把 skip 记为通过。此项可补强流式和压缩路径证据，但不是公开 CLI 用户流程的替代。
 
-## 验收记录（执行者填写）
+## 用户实测结果（2026-09-29）
 
 | 用例 | 结果：通过/失败/未执行/未触发 | 退出码、实际现象与脱敏证据位置 |
 |---|---|---|
-| 0 安装与配置投影 |  |  |
-| 1 真实模型 read → ToolMessage → 最终回复、telemetry |  |  |
-| 2 同会话恢复与新会话隔离 |  |  |
-| 3 工作区越界拒绝 |  |  |
-| 4 本机远程 create/prompt/snapshot、重启恢复 |  |  |
-| 5 四项 live tests |  |  |
+| 0 安装与配置投影 | 部分通过 | compatible CLI/server 与 live tests 均成功调用真实端点；单独的 `uv sync` 与非敏感 `public_dict()` 配置投影输出未留存。 |
+| 1 真实模型 read → ToolMessage → 最终回复、telemetry | 工具闭环通过；telemetry 手工脱敏检查未单独核实 | JSONL 退出码 0，真实 read 返回 `M11-PROBE-001`，随后模型完成回复；模型还调用了 search/list。所贴输出没有 telemetry 文件内容或 marker/prompt/API key 查询结果。 |
+| 2 同会话恢复与新会话隔离 | 通过 | `test1` 同 session 无工具调用地回忆旧值 `M11-PROBE-001`；session list 含 `test1`；新 session `test2` 表示此前没有对话。命令退出码 0。 |
+| 3 工作区越界拒绝 | 通过（修正路径后） | 首次 `out-workspace/outside.txt` 测试只命中不存在路径，不计边界证据。修正为 `../out-workspace/outside.txt` 后，真实 read 返回 `Resolved path is outside the workspace root.`，没有返回 sentinel 内容。 |
+| 4 本机远程 create/prompt/snapshot、重启恢复 | 通过 | 客户端创建 session、真实 read 得到 marker，snapshot 显示 completed/idle、4 条消息与 checkpoint。重启后 epoch 从 `1f215de0...` 变为 `6845db69...`，同一 session、checkpoint 和 4 条消息恢复；revision 重置为 0。一次服务未就绪时的 `ClientDisconnectedError` 不作为最终结果。 |
+| 5 四项 live tests | 通过 | `uv run --env-file .env pytest tests/live/test_provider_smoke.py -m live -q --basetemp=.pytest-tmp-m11-live`：**4 passed in 8.14s**，无 skip；覆盖普通回复、流式回复、SQLite 恢复历史、摘要/压缩路径。 |
 
-执行日期：____；执行者：____；OS / Python：____；模型 ID：____；API 主机名：____；是否使用合成工作区：____；总体结论与问题编号：____。
+执行环境：Windows PowerShell；OS build、Python 版本、模型 ID 和 API 主机名未在用户结果中记录。测试使用合成 workspace/marker。令牌、API key 和完整凭据不收录于本记录。总体结论：用户验收并授权归档 M11 本地交付范围；独立 Windows/Linux 与真实服务部署验证按既有决定留作 D1–D3，telemetry 实际文件脱敏查询与配置投影输出保留为未单独核实的证据点。
 
 用户视角的核心验收至少需要用例 0–2 与 4 有实际结果，并核对用例 1 的真实工具事件。用例 3 若模型未触发工具应保留“未触发”；用例 5 用来复查框架内部的流式、历史与压缩路径。任何失败都应保留脱敏的命令、退出码和预期/实际差异；不要改写为通过。M6 的 fork/history API、文件写入审批和命令执行审批不在这些公开只读 CLI 步骤内，仍以各自原验收和独立授权路径为准。部署网络、跨机器安全与新环境兼容继续在 [后置验证记录](../history/2026-09-28-m11-deferred-deployment-validation.md) 中跟踪。
