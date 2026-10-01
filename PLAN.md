@@ -2,9 +2,11 @@
 
 ## 1. 当前状态与文档分工
 
-- 2026-10-01：用户选择后续任务 1、2、4、5，先优化计划后授权执行。服务管理、共用持久审批、Web 文件修改与命令审批已实现；本机严格回归 626 passed/6 skipped、真实 Web gate 2 passed。最终本机复验通过；触发 Linux/Windows CI 的开发分支推送被自动审批审查拒绝，待用户明确批准 GitHub 目标仓库，平台结果不视为通过。用户验收另行进行。详见 [计划](docs/design/web-coding-plan.md)与[独立验收记录](docs/acceptance/web-coding-2026-10-01.md)，不改变已归档里程碑或既有验证结论。
+- 2026-10-01 归档：用户授权归档 Web 工作台及两轮扩展的已交付范围，并合并到本地 `main`，暂不 push。启动/恢复/分支/流式、服务管理、持久审批、文件修改和命令执行已交付；本机严格回归 626 passed/6 skipped、真实 Web gate 2 passed。见 [Web 归档](docs/acceptance/web-archive-2026-10-01.md)与[原始验收记录](docs/acceptance/web-coding-2026-10-01.md)。Linux/Windows 独立 CI、Windows 特定进程树回收、用户手工功能核对及部署验证保留在 [后续清单](docs/follow-ups/web.md)，不关闭 M11 D1–D3。
 
-- 2026-10-01：用户授权先计划再直接开发 Web 后续扩展：macOS/Linux 启动、Web 中断恢复与 checkpoint 分支、Web 流式回复。本轮开发及 macOS 本机离线验证完成，用户验收另行进行；远端 CI 和真实服务的新流式路径未实测，不更改 M0–M11 历史验收或关闭 D1–D3。范围与实际证据见 [后续开发计划](docs/design/web-continuation.md)。
+- 2026-10-01 实现与复验：用户选择任务 1、2、4、5，先优化计划后授权开发；服务管理与 Coding Tools、本机组合及 live 验证完成。此前为触发平台 CI 的开发分支推送被自动审批审查拒绝，没有远端运行结果；本次遵循用户“不 push”的指令，仅本地归档合并。范围见 [开发计划](docs/design/web-coding-plan.md)，未执行的平台标准仍保留。
+
+- 2026-10-01 首轮扩展：用户授权先计划再直接开发 macOS/Linux 启动、Web 中断恢复与 checkpoint 分支、Web 流式回复。该轮 macOS 本机离线开发与验证完成，当时未实测远端 CI 和真实服务的新流式路径；后续真实 Web gate 单列于下一轮，不回填历史数字。范围与原始证据见 [后续开发计划](docs/design/web-continuation.md)。
 
 - Web UI 扩展: 2026-09-29 用户明确选择直接快速交付, 不走教学模式、不留学习者 TODO。独立于 M0-M11 的验收与归档, 复用现有运行时交付本机单用户工作台。使用方式、实测结果与边界见 [Web UI](docs/web-ui.md)。M11 后置遗留仍按其验收记录跟踪，不因 Web UI 扩展关闭。
 

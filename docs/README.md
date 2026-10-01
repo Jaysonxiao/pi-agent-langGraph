@@ -1,4 +1,4 @@
-# M1–M11 文档索引
+# 项目文档索引（M1–M11 与 Web 扩展）
 
 当前状态和交付范围以 [执行计划](../PLAN.md) 为准；项目定位与协作方式见 [AGENTS.md](../AGENTS.md)。本文是导航，不另立一套状态或验收口径。
 
@@ -10,8 +10,9 @@
 | 发现、修订、证据、待核实 | [文档审计](reviews/M1-M8-audit.md) | 本轮检查的方法和逐项纠正 |
 | 优先级、依赖、完成标准 | [后续开发清单](follow-ups/M1-M8.md) | 初次归档问题基线与 2026-09-24 纠正后的 M8 剩余复验；M9 未关闭边界见其归档文件 |
 | 当前使用和配置 | [README](../README.md) | 可执行命令和 CLI/Provider 限制 |
-| Web 工作台与后续扩展 | [Web UI](web-ui.md)、[2026-10-01 开发计划](design/web-continuation.md) | 启动、流式文本、中断恢复与 checkpoint 分支；独立验证记录 |
-| Web 服务管理与 Coding Tools | [开发计划](design/web-coding-plan.md)、[独立验收记录](acceptance/web-coding-2026-10-01.md) | 用户选择任务 1、2、4、5；代码与本机/live 验证已完成，平台 CI 和用户验收另列 |
+| Web 已交付范围归档 | [Web 归档](acceptance/web-archive-2026-10-01.md)、[归档后续清单](follow-ups/web.md) | 2026-10-01 用户授权本机范围归档及本地 main 合并；暂不 push，平台与部署验证保留 |
+| Web 使用与首轮扩展 | [Web UI](web-ui.md)、[2026-10-01 原计划及证据](design/web-continuation.md) | 启动、流式文本、中断恢复与 checkpoint 分支；保留该轮测试数字 |
+| Web 服务管理与 Coding Tools | [原开发计划](design/web-coding-plan.md)、[独立验收记录](acceptance/web-coding-2026-10-01.md) | 用户选择任务 1、2、4、5；代码与本机/live 验证已归档，未执行项转入后续清单 |
 | M10 远程接入设计与练习 | [M10 设计](design/M10.md) | 系统链路、Pi 源码映射、M10.1–M10.4 复盘；切片状态与验证命令仍由 PLAN 管理 |
 | M11 全链路收束、架构复盘与验收 | [M11 设计](design/M11.md)、[M11 架构](architecture/M11.md)、[M11 归档](acceptance/M11.md)、[真实模型手工执行记录](acceptance/M11-real-provider-manual.md) | 2026-09-29 本地交付范围已验收归档；D1–D3 与两项未单独留存的手工证据仍明确保留 |
 | M11 后置验证决定 | [遗留历史记录](history/2026-09-28-m11-deferred-deployment-validation.md) | 新环境 Windows/Linux、真实服务部署验证经用户授权后置；不视为通过 |

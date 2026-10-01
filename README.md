@@ -16,7 +16,7 @@
 
 面向希望从“会调用模型”走向“能理解和构建完整 Agent”的 Python / AI 应用开发者。项目以 Pi 的核心设计为学习线索，提供可逐阶段验证的实现、命令行工具，以及可直接体验的中文本机工作台。
 
-> **项目进度**：M0–M11 已按各自交付范围归档；Web UI 为独立扩展。新环境 Windows / Linux 与真实服务部署验证仍有后置项，详见 [当前计划](PLAN.md) 和 [M11 验收记录](docs/acceptance/M11.md)。
+> **项目进度**：M0–M11 与本机 Web 扩展已按各自交付范围归档。Web 已支持流式、恢复/分支、服务管理和人工审批后的文件修改/命令执行。新环境 Windows / Linux 与真实服务部署验证仍有后置项，详见 [当前计划](PLAN.md)、[Web 归档](docs/acceptance/web-archive-2026-10-01.md) 和 [后续清单](docs/follow-ups/web.md)。
 
 <a id="features"></a>
 
@@ -28,11 +28,12 @@
 
 | 能力 | 可以做什么 | 使用入口 |
 | :--- | :--- | :--- |
-| 🖥️ 本机工作台 | 中文深色界面、Markdown 回复、会话搜索与归档、移动端布局 | Web UI |
+| 🖥️ 本机工作台 | 中文深色界面、Markdown/流式回复、会话标题搜索与归档、移动端布局 | Web UI |
 | 🔁 模型与工具循环 | 连接 compatible 模型，调用 `read` / `list` / `search`，将结果交回模型 | Web / compatible CLI |
-| 💾 持久化会话 | SQLite 保存消息与检查点；Web 支持刷新后继续查看、历史分页 | Web / compatible CLI / 会话 API |
+| 💾 持久化会话 | SQLite 保存消息与检查点；Web 支持历史分页、显式中断恢复与完成检查点分支 | Web / compatible CLI / 会话 API |
 | 🧠 上下文管理 | 项目规则、模板、近似 token 预算、历史压缩与摘要 | 上下文管线 / `context inspect` |
-| 🛡️ 工具与执行控制 | 工作区路径约束；CLI 命令提案经过交互审批后执行 | 只读工具 / `command` |
+| 🛡️ 工具与执行控制 | 工作区路径约束；Web 文件差异与命令提案经人工批准后执行；CLI 命令交互审批 | Web 审批 / `command` |
+| ⚙️ 启动与服务管理 | Windows、macOS/Linux 启动；查询、停止、重启与锁/端口冲突诊断 | 启动脚本 / `pi-agent-web` |
 | 🔎 过程与评测 | Web 节点详情、图事件、可选 telemetry、离线工具评测 | Web / CLI / eval |
 | 🔌 本机客户端与服务端 | 共享令牌认证、创建会话、发送请求、取消与快照 | `pi-agent-server` / `pi-agent-client` |
 
@@ -54,7 +55,7 @@ flowchart LR
     F -.-> I
 ```
 
-默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供只读工具、节点级进度、流式文本、显式中断恢复和 checkpoint 分支；写文件、浏览器终端与 Web 命令审批尚未接入。工作区路径限制不等于操作系统沙箱。
+默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供只读工具、节点级进度、流式文本、显式中断恢复和 checkpoint 分支。文件 `write/edit` 与命令提案须由服务端启动参数显式启用，并经 Web 人工审批后执行；命令仅允许已配置的可执行文件。工作区路径限制不等于操作系统沙箱。
 
 <a id="quickstart"></a>
 
@@ -375,7 +376,7 @@ PI_AGENT_API_KEY=replace-with-your-api-key
 <details>
 <summary>能自动修改文件、执行命令或部署到公网吗？</summary>
 
-当前 Web 提供只读工具，没有文件写入或命令审批入口。CLI 的命令执行需要允许列表、持久化提案与人工批准。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；相关验证边界见验收文档。
+当前 Web 默认提供只读工具；文件修改和命令提案由服务端显式启用，人工审批后才执行。CLI 的命令执行需要允许列表、持久化提案与人工批准。结果不确定的操作不自动重放。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；相关验证边界见 [Web 归档](docs/acceptance/web-archive-2026-10-01.md)。
 
 </details>
 

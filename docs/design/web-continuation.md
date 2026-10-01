@@ -2,6 +2,8 @@
 
 计划日期：2026-10-01（Asia/Shanghai）。用户授权先计划、再直接开发；本轮独立于已归档的 M0–M11。
 
+归档日期：2026-10-01。用户授权归档已交付范围并合并本地 `main`，暂不 push。见 [Web 归档](../acceptance/web-archive-2026-10-01.md) 与 [后续清单](../follow-ups/web.md)。下方保留该轮原始范围和验证结果；后续 Coding Tools 及真实 Web gate 的结果单列在 [后续验收](../acceptance/web-coding-2026-10-01.md)，不回填该轮测试数字。
+
 ## 范围与顺序
 
 1. **跨平台启动**：保留 Windows 脚本，补齐 macOS/Linux Bash 入口、文档和自动化启动 smoke。优先在当前 macOS 实测；CI 配置覆盖 Linux/macOS，远端结果另行记录，不能把配置当作通过。

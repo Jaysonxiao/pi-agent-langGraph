@@ -1,6 +1,8 @@
 # Web 服务管理与 Coding Tools 验收记录
 
-实现、验证日期：2026-10-01（Asia/Shanghai）。范围见[开发计划](../design/web-coding-plan.md)。本记录独立于 M0–M11 和上一轮 Web 扩展；用户功能验收另行进行。
+实现、验证日期：2026-10-01（Asia/Shanghai）。范围见[开发计划](../design/web-coding-plan.md)。本记录独立于 M0–M11 和上一轮 Web 扩展。
+
+归档日期：2026-10-01。用户授权归档已交付范围并合并到本地 `main`，暂不 push。归档结论见 [Web 归档](web-archive-2026-10-01.md)，未关闭项统一见 [后续清单](../follow-ups/web.md)。逐项用户手工功能验收没有另行记录；下方保留实际自动化和 live 验证事实。
 
 ## 已交付行为
 
@@ -28,7 +30,7 @@
 | Chrome 浏览器 E2E | 7 passed，22.5s；文件 diff/批准/拒绝/刷新、命令真实输出、既有读取/设置/移动端/恢复/分支 |
 | `uv run python scripts/web_startup_smoke.py` | 通过，真实 Bash launcher 在带空格隔离工作区完成安装/构建、HTTP/read、持久消息与服务回收 |
 | 显式 live Web gate | **2 passed**，33.26s；命令见下方，真实 compatible 请求，合成工作区 |
-| Linux/Windows CI | 未执行。独立开发分支已提交，推送被自动审批审查拒绝，需用户明确批准目标仓库后才能触发；不能以矩阵配置视为通过 |
+| Linux/Windows CI | 未执行。此前开发分支推送被自动审批审查拒绝；归档时用户要求仅合并本地 main、暂不 push，未触发远端 CI；不能以矩阵配置视为通过 |
 
 真实 Web 验证命令：
 
@@ -52,7 +54,7 @@ PI_AGENT_LIVE=1 uv run --env-file .env --extra web pytest tests/live/test_web_pr
 
 ## 边界与剩余项
 
-- 用户验收待进行；远端矩阵证据尚待补入。M11 D1–D3 只按对应实际证据更新，公网部署仍不在本轮范围。
+- 用户授权已交付范围归档；逐项手工功能验收和远端矩阵证据仍未另行记录，见后续清单 W1/W3。M11 D1–D3 只按对应实际证据更新，公网部署仍不在本轮范围。
 - 文件与数据库、进程与数据库不是同一事务。uncertain 需要人工核对；没有跨资源 exactly-once 保证，也不自动撤销已发生的部分效果。
 - Windows 父进程提前退出后遗留子进程的严格回收需要独立进程容器/Job Object 能力；当前明确报告不确定。普通父进程仍存活时沿用 taskkill /T。
 - 文件路径限制不是 OS 沙箱。程序 allowlist/argv 审批也不限制程序以当前用户权限访问其他主机资源；本轮限本机单用户使用。
