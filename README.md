@@ -16,7 +16,7 @@
 
 面向希望从“会调用模型”走向“能理解和构建完整 Agent”的 Python / AI 应用开发者。项目以 Pi 的核心设计为学习线索，提供可逐阶段验证的实现、命令行工具，以及可直接体验的中文本机工作台。
 
-> **项目进度**：M0–M11 与本机 Web 扩展已按各自交付范围归档。Web 已支持流式、恢复/分支、服务管理和人工审批后的文件修改/命令执行。新环境 Windows / Linux 与真实服务部署验证仍有后置项，详见 [当前计划](PLAN.md)、[Web 归档](docs/acceptance/web-archive-2026-10-01.md) 和 [后续清单](docs/follow-ups/web.md)。
+> **项目进度**：M0–M11 与本机 Web 扩展已按各自交付范围归档。Web 已支持流式、恢复/分支、服务管理、文件修改/命令执行及可配置审批，工具设置调整已纳入整体归档并复核 CLI/TCP 基线兼容性。新环境 Windows / Linux 与真实服务部署验证仍有后置项，详见 [当前计划](PLAN.md)、[整体复审归档](docs/acceptance/web-cli-review-2026-10-01.md)、[Web 初次归档](docs/acceptance/web-archive-2026-10-01.md) 和 [后续清单](docs/follow-ups/web.md)。
 
 <a id="features"></a>
 

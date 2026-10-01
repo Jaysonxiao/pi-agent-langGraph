@@ -4,7 +4,7 @@
 
 本项目面向正在学习 Agent 工程的 Python 开发者：参考 Pi Agent 的设计，用 Python / LangGraph 实现可运行、可测试的模型—工具循环、会话、上下文和运行时。重点是理解 Pi 的设计意图与本项目的改造取舍，不追求逐项复制 Pi。Python 要求 `>=3.11,<3.14`；依赖和脚本以 `pyproject.toml` 为准。仓库采用 MIT 协议，见 `LICENSE`。
 
-M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立扩展，已于 2026-10-01 按已交付范围归档，见 `docs/acceptance/web-archive-2026-10-01.md`。新环境 Windows/Linux 和真实服务部署验证仍有后置项，Web 未关闭项见 `docs/follow-ups/web.md`，不能将归档等同于生产就绪。`PLAN.md` 是当前状态、范围和验收门槛的权威记录；`docs/acceptance/` 保存实际证据和未关闭项。`README.md` 是运行入口，`docs/README.md` 是文档索引，`LEARNING_LOG.md` 记录学习与决策。`docs/history/` 只作历史追溯。实现、验收、归档和复验日期分别记录。
+M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立扩展，已于 2026-10-01 按已交付范围归档，见 `docs/acceptance/web-archive-2026-10-01.md`。同日整体复审覆盖工具设置调整及 CLI/TCP 基线兼容性，最新证据见 `docs/acceptance/web-cli-review-2026-10-01.md`。新环境 Windows/Linux 和真实服务部署验证仍有后置项，Web 未关闭项见 `docs/follow-ups/web.md`，不能将归档等同于生产就绪。`PLAN.md` 是当前状态、范围和验收门槛的权威记录；`docs/acceptance/` 保存实际证据和未关闭项。`README.md` 是运行入口，`docs/README.md` 是文档索引，`LEARNING_LOG.md` 记录学习与决策。`docs/history/` 只作历史追溯。实现、验收、归档和复验日期分别记录。
 
 ## 一条请求如何运行
 

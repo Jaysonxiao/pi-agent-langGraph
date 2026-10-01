@@ -2,6 +2,8 @@
 
 ## 1. 当前状态与文档分工
 
+- 2026-10-01 整体复审归档：用户要求核对当天全部 Web 改造与 CLI 基线，确认兼容后提交本地 main。复审修正 PI-AGENTS.md 的旧只读指令冲突，补充旧 CLI 审批数据迁移/恢复隔离回归；未发现 CLI/TCP 行为回归。最终严格 pytest 640 passed/6 skipped、Chrome E2E 8 passed、前端单测/构建、mypy/Ruff、CLI smoke/eval 与真实 Bash 启动通过。初始 Web、两轮扩展及工具设置调整整体归档；详见 [整体复审记录](docs/acceptance/web-cli-review-2026-10-01.md)。保留平台/live/部署边界，仍不 push。
+
 - 2026-10-01 归档后调整：用户反馈本机 Web 基本可用，并授权默认开启全部工具、增加审批启动参数、简化 write/edit/command 展示和全部工具勾选。已实现下一轮设置快照、选择持久化及旧设置迁移，默认仍需审批；关闭审批的新操作仍使用持久提案与认领，旧待审批操作不自动批准。独立验证见 [工具设置调整记录](docs/acceptance/web-tool-settings-2026-10-01.md)，不回填下方归档基线或新增里程碑；仍不 push。
 
 - 2026-10-01 归档：用户授权归档 Web 工作台及两轮扩展的已交付范围，并合并到本地 `main`，暂不 push。启动/恢复/分支/流式、服务管理、持久审批、文件修改和命令执行已交付；本机严格回归 626 passed/6 skipped、真实 Web gate 2 passed。见 [Web 归档](docs/acceptance/web-archive-2026-10-01.md)与[原始验收记录](docs/acceptance/web-coding-2026-10-01.md)。Linux/Windows 独立 CI、Windows 特定进程树回收、用户手工功能核对及部署验证保留在 [后续清单](docs/follow-ups/web.md)，不关闭 M11 D1–D3。

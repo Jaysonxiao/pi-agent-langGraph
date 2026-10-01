@@ -1,6 +1,6 @@
 # Web 工作台归档后续清单
 
-更新日期：2026-10-01（Asia/Shanghai）。已交付范围见 [Web 归档](../acceptance/web-archive-2026-10-01.md)，测试事实见 [本轮验收记录](../acceptance/web-coding-2026-10-01.md)。本清单保留未关闭项，不代表已授权启动新的开发阶段。
+更新日期：2026-10-01（Asia/Shanghai）。已交付范围见 [Web 归档](../acceptance/web-archive-2026-10-01.md)，最新整体复审和 CLI 兼容性证据见 [整体复审归档](../acceptance/web-cli-review-2026-10-01.md)，此前测试事实见 [Coding 验收记录](../acceptance/web-coding-2026-10-01.md)。本清单保留未关闭项，不代表已授权启动新的开发阶段。
 
 | 编号 | 当前状态与范围 | 下一步与完成证据 |
 |---|---|---|
