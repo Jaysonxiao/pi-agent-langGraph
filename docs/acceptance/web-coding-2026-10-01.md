@@ -23,12 +23,12 @@
 | 全仓 pytest，ResourceWarning 与 PytestUnraisableExceptionWarning 均设为错误 | **626 passed、6 skipped**，13.97s，无警告；6 项 live gate 在默认离线套件中跳过 |
 | mypy `src tests scripts` | 276 source files 通过 |
 | mypy `--platform win32 src tests scripts` | 276 source files 通过；这是条件分支类型检查，不能替代 Windows 实际执行 |
-| Ruff lint / format-check、`git diff --check` | 通过，327 Python 文件格式检查通过 |
+| Ruff lint / format-check、`git diff --check` | 通过；Python 文件格式检查通过 |
 | 前端单测 / 构建 | 4 passed；TypeScript/Vite 通过 |
-| Chrome 浏览器 E2E | 7 passed，27.9s；文件 diff/批准/拒绝/刷新、命令真实输出、既有读取/设置/移动端/恢复/分支 |
+| Chrome 浏览器 E2E | 7 passed，22.5s；文件 diff/批准/拒绝/刷新、命令真实输出、既有读取/设置/移动端/恢复/分支 |
 | `uv run python scripts/web_startup_smoke.py` | 通过，真实 Bash launcher 在带空格隔离工作区完成安装/构建、HTTP/read、持久消息与服务回收 |
 | 显式 live Web gate | **2 passed**，33.26s；命令见下方，真实 compatible 请求，合成工作区 |
-| Linux/Windows CI | 待实际运行并补入运行链接、commit 与结果，不能以已存在的矩阵配置视为通过 |
+| Linux/Windows CI | 未执行。独立开发分支已提交，推送被自动审批审查拒绝，需用户明确批准目标仓库后才能触发；不能以矩阵配置视为通过 |
 
 真实 Web 验证命令：
 
@@ -48,6 +48,7 @@ PI_AGENT_LIVE=1 uv run --env-file .env --extra web pytest tests/live/test_web_pr
 - 初次 live 流取消测试适配器漏了 aclose 协议，实际落到完整回复路径；补齐协议。默认 Web 提示词仍声明只读，现按已启用能力构造提示词。
 - live 回灌曾出现 Provider 请求失败，文件提案已成功写入但模型回复未完成；保留此失败事实。合成消息的直接传输探测可成功，添加不含 URL/密钥/正文的异常分类诊断，并按 Web 默认重试策略组合复验，最终两项通过。不能由此次成功推断 Provider 永久稳定或所有真实取消场景已覆盖。
 - 沙箱中 uv 共享缓存、本机监听/进程身份权限与网络调用受限；相关真实命令在允许权限下执行，未将环境拒绝视为代码通过。
+- 为触发实际平台 CI，创建本地 `codex/web-service-approvals` 分支并提交开发结果。推送到当前 origin `https://github.com/Jaysonxiao/pi-agent-langGraph.git` 被自动审批审查拒绝：尚未确认向此具体目的地导出代码的授权。没有推送成功或远端 CI 运行证据；后续需用户明确批准这一目的地。
 
 ## 边界与剩余项
 

@@ -2,7 +2,7 @@
 
 ## 1. 当前状态与文档分工
 
-- 2026-10-01：用户选择后续任务 1、2、4、5，先优化计划后授权执行。服务管理、共用持久审批、Web 文件修改与命令审批已实现；本机严格回归 626 passed/6 skipped、真实 Web gate 2 passed。最终复验进行中，Linux/Windows CI 证据待执行，用户验收另行进行。详见 [计划](docs/design/web-coding-plan.md)与[独立验收记录](docs/acceptance/web-coding-2026-10-01.md)，不改变已归档里程碑或既有验证结论。
+- 2026-10-01：用户选择后续任务 1、2、4、5，先优化计划后授权执行。服务管理、共用持久审批、Web 文件修改与命令审批已实现；本机严格回归 626 passed/6 skipped、真实 Web gate 2 passed。最终本机复验通过；触发 Linux/Windows CI 的开发分支推送被自动审批审查拒绝，待用户明确批准 GitHub 目标仓库，平台结果不视为通过。用户验收另行进行。详见 [计划](docs/design/web-coding-plan.md)与[独立验收记录](docs/acceptance/web-coding-2026-10-01.md)，不改变已归档里程碑或既有验证结论。
 
 - 2026-10-01：用户授权先计划再直接开发 Web 后续扩展：macOS/Linux 启动、Web 中断恢复与 checkpoint 分支、Web 流式回复。本轮开发及 macOS 本机离线验证完成，用户验收另行进行；远端 CI 和真实服务的新流式路径未实测，不更改 M0–M11 历史验收或关闭 D1–D3。范围与实际证据见 [后续开发计划](docs/design/web-continuation.md)。
 
