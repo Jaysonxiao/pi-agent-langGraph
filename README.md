@@ -54,7 +54,7 @@ flowchart LR
     F -.-> I
 ```
 
-默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供只读工具与节点级进度；写文件、浏览器终端、Web 命令审批与逐 token 展示尚未接入。工作区路径限制不等于操作系统沙箱。
+默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供只读工具、节点级进度、流式文本、显式中断恢复和 checkpoint 分支；写文件、浏览器终端与 Web 命令审批尚未接入。工作区路径限制不等于操作系统沙箱。
 
 <a id="quickstart"></a>
 
@@ -69,7 +69,7 @@ flowchart LR
 | Node.js / npm | Node.js `22.12+`，或符合 Vite 7 要求的版本 | 仅构建 Web 前端时需要 |
 | Git | 可用 | 获取仓库 |
 
-以下命令使用 **Windows / PowerShell**，均在项目根目录执行。依赖首次安装需要联网；fake 示例运行时不调用远程模型。
+以下命令默认使用 **Windows / PowerShell**，Web 启动另提供 macOS / Linux 的 Bash 示例，均在项目根目录执行。依赖首次安装需要联网；fake 示例运行时不调用远程模型。
 
 ```powershell
 git clone https://github.com/Jaysonxiao/pi-agent-langGraph.git
@@ -87,6 +87,12 @@ cd pi-agent-langGraph
 
 ```powershell
 .\scripts\start-web.ps1
+```
+
+macOS / Linux：
+
+```bash
+./scripts/start-web.sh
 ```
 
 脚本会安装 Python / 前端依赖、构建静态资源并启动服务。打开 [http://127.0.0.1:8766](http://127.0.0.1:8766)，输入：
@@ -139,6 +145,10 @@ uv run --extra web pi-agent-web --provider fake --workspace .
 2. 在右侧查看模型与工具阶段，点击已完成节点查看输入、输出和检查点投影。
 3. 使用“工作区与工具”切换本地工作区，启停工具并调整单轮调用上限。
 4. 需要中断时点击“停止运行”；历史会话可重命名、归档和恢复。
+5. 未完成的运行可点击“继续运行”，从当前检查点继续；可能重新请求模型或读取文件，不会重复追加用户消息，也不会在服务重启后自动执行。
+6. 会话操作菜单中的“从检查点创建分支”可选择已完成的检查点，复制为独立会话并继续聊天；原会话保留。
+
+支持 streaming 的模型会逐步展示文本；完成后保存完整回复。fake 模式使用确定性分片演示界面，compatible 使用服务端原生 SSE。非流式模型仍显示完整回复；CLI/TCP 的输出方式不因此改变。
 
 已创建会话固定使用创建时的工作区。按下方配置好 `.env` 后，可启动真实模型：
 
@@ -148,6 +158,34 @@ uv run --extra web pi-agent-web --provider fake --workspace .
 # 可选：指定工作区和端口；目录需要已存在。
 .\scripts\start-web.ps1 -Provider compatible -Workspace .\safe-workspace -Port 8766
 ```
+
+macOS / Linux：
+
+```bash
+./scripts/start-web.sh --provider compatible
+
+# 可选：指定工作区、数据库和端口；工作区需要已存在，数据库必须在工作区之外。
+./scripts/start-web.sh --provider compatible --workspace ./safe-workspace \
+  --database "$HOME/.pi-agent/web.sqlite" --port 8767
+```
+
+运行 `./scripts/start-web.sh --help` 查看参数。两个启动脚本都以项目根目录解析相对路径。
+
+服务管理与人工审批：
+
+```bash
+./scripts/start-web.sh status
+./scripts/start-web.sh stop
+./scripts/start-web.sh restart --provider compatible --workspace ./safe-workspace
+
+# 文件修改与命令能力由启动配置显式启用，每份提案仍需要在页面批准。
+./scripts/start-web.sh --provider compatible --workspace ./safe-workspace \
+  --enable-file-mutations --allow-executable /usr/bin/git
+```
+
+Windows 对应参数为 `-Action status|stop|restart`、`-EnableFileMutations`、`-AllowExecutable`。
+管理自定义数据库时重复指定 `--database` / `-Database`；重启时提供所需启动参数。
+`status` / `stop` 复用已安装的 Python 环境，不构建前端。旧版服务没有实例记录时，请在原终端 `fg` 后 `Ctrl+C` 退出，再用新入口启动；`Ctrl+Z` 会暂停进程并继续占锁。审批和故障恢复的完整边界见 [Web UI](docs/web-ui.md)。
 
 ### CLI：读取文件并保存会话
 
@@ -277,15 +315,15 @@ PI_AGENT_API_KEY=replace-with-your-api-key
 | `PI_AGENT_REMOTE_TOKEN` | 无 | 本机 TCP 服务端 / 客户端必填共享令牌 |
 | `PI_AGENT_LIVE` | 未启用 | 仅在显式执行真实服务测试时设为 `1` |
 
-**加载规则**：普通命令通过 `uv run --env-file .env ...` 显式加载；`start-web.ps1 -Provider compatible` 自动读取项目根目录 `.env`。文件存在本身不会让默认 fake CLI 访问模型。`.env` 已被 Git 忽略，请勿提交密钥；`PI_AGENT_BASE_URL` 不要再附加 `/chat/completions`。
+**加载规则**：普通命令通过 `uv run --env-file .env ...` 显式加载；`start-web.ps1 -Provider compatible` 或 `start-web.sh --provider compatible` 自动读取项目根目录 `.env`。文件存在本身不会让默认 fake CLI 访问模型。`.env` 已被 Git 忽略，请勿提交密钥；`PI_AGENT_BASE_URL` 不要再附加 `/chat/completions`。
 
 ### 工作区、数据与项目规则
 
 | 配置项 | 位置 / 行为 |
 | :--- | :--- |
-| Web 数据库 | 默认 `~/.pi-agent/web.sqlite`；可用脚本 `-Database` 或 Web CLI `--database` 指定，必须在工作区之外 |
+| Web 数据库 | 默认 `~/.pi-agent/web.sqlite`；可用 PowerShell 脚本 `-Database`、Bash 脚本或 Web CLI `--database` 指定，必须在工作区之外 |
 | CLI 数据库 | 通过 `--database` 指定；同一数据库 + 会话 ID 用于后续对话 |
-| Web 工作区 | 启动时 `-Workspace` / `--workspace` 指定，页面设置可更换；已有会话保留原工作区 |
+| Web 工作区 | 启动时 PowerShell 脚本 `-Workspace`、Bash 脚本或 Web CLI `--workspace` 指定，页面设置可更换；已有会话保留原工作区 |
 | Web 项目指令 | 工作区中的 `PI-AGENTS.md`，见 [格式与发现规则](docs/pi-agents.md) |
 | CLI / TCP 项目指令 | 沿用 `AGENTS.md` 上下文管线；与 Web 的规则文件区分 |
 
@@ -330,7 +368,7 @@ PI_AGENT_API_KEY=replace-with-your-api-key
 <details>
 <summary>为什么 Web 页面没有加载，或端口被占用？</summary>
 
-新 checkout 没有前端构建产物，先运行 `start-web.ps1`，或按手工步骤执行 `npm ci` 与 `npm run build`。端口占用时使用 `-Port 8767`，然后访问对应本机地址。构建失败时先检查 Python、Node.js 和 uv 版本。
+新 checkout 没有前端构建产物，先运行 `start-web.ps1`（Windows）或 `start-web.sh`（macOS / Linux），或按手工步骤执行 `npm ci` 与 `npm run build`。端口占用时使用 `-Port 8767`（PowerShell）或 `--port 8767`（Bash），然后访问对应本机地址。构建失败时先检查 Python、Node.js 和 uv 版本。
 
 </details>
 

@@ -4,32 +4,42 @@ import asyncio
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.types import StateSnapshot
 
-from pi_agent.context.default_prompt import PI_WORKBENCH_SYSTEM_PROMPT
+from pi_agent.context.default_prompt import workbench_prompt
 from pi_agent.context.instructions import PI_INSTRUCTION_FILENAME
 from pi_agent.extensions import HookEvent, HookRegistry
-from pi_agent.graph.builder import build_async_tool_graph
+from pi_agent.graph.builder import build_async_minimal_graph, build_async_tool_graph
 from pi_agent.models.async_base import AsyncChatModel
+from pi_agent.models.streaming import TextPreview
+from pi_agent.runtime.coding import CodingExecutor, proposal_projection
 from pi_agent.runtime.policy import RetryPolicy
 from pi_agent.runtime.session import SessionRuntimeConfig, run_session
 from pi_agent.server.sessions import RunLease, SessionCoordinator
 from pi_agent.sessions import open_async_sqlite_checkpointer
 from pi_agent.sessions.config import checkpoint_config, session_config
+from pi_agent.tools.approval_store import ApprovalStore
 from pi_agent.web.schemas import (
     DEFAULT_TOOL_CALL_LIMITS,
     MAX_TOOL_CALLS_PER_TOOL,
+    ApprovalAction,
+    CheckpointAction,
+    CheckpointItem,
     MessageItem,
     MessagePage,
     NewRun,
     RunItem,
     RunStatus,
+    SessionEdit,
+    SessionItem,
     SessionView,
     SettingsUpdate,
     StepDetail,
+    StreamingPreview,
 )
 from pi_agent.web.store import WebStore
 
@@ -50,6 +60,8 @@ class Workbench:
         timeout: float = 120,
         request_timeout: float = 30,
         attempts: int = 3,
+        file_mutations: bool = False,
+        allowed_executables: frozenset[str] = frozenset(),
     ) -> None:
         self.database = database
         self.default_workspace = workspace.resolve()
@@ -59,6 +71,10 @@ class Workbench:
         self.timeout = timeout
         self.request_timeout = request_timeout
         self.attempts = attempts
+        self.file_mutations = file_mutations
+        self.allowed_executables = allowed_executables
+        self.approvals = ApprovalStore(database)
+        self.approvals.initialize()
         self.epoch = uuid4().hex
         self.store = WebStore(database, self.default_workspace)
         self.enabled_tools: tuple[str, ...]
@@ -93,6 +109,8 @@ class Workbench:
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.lock = asyncio.Lock()
         self.closing = False
+        self.previews: dict[str, StreamingPreview] = {}
+        self.preview_revision = 0
 
     def require_session(self, session_id: str) -> None:
         if self.store.session(session_id) is None:
@@ -106,6 +124,9 @@ class Workbench:
             "server_epoch": self.epoch,
             "capabilities": list(self.enabled_tools),
             "tool_limits": self.tool_call_limits.copy(),
+            "approval_capabilities": (["write", "edit"] if self.file_mutations else [])
+            + (["propose_command"] if self.allowed_executables else []),
+            "allowed_executables": sorted(self.allowed_executables),
         }
 
     async def update_settings(self, settings: SettingsUpdate) -> dict[str, object]:
@@ -147,13 +168,69 @@ class Workbench:
         item = self.store.session(session_id)
         assert item is not None
         run = self.store.latest_run(session_id)
+        proposals = self.approvals.proposals(session_id)
+        awaiting = any(item.status == "pending" for item in proposals)
         return SessionView(
             session=item,
             server_epoch=self.epoch,
             run=run,
-            needs_recovery=bool(state.next) and not self.coordinator.is_busy(session_id),
+            needs_recovery=bool(state.next or state.interrupts)
+            and not self.coordinator.is_busy(session_id)
+            and not awaiting,
             history=project_history(state),
             activities=self.store.events(session_id),
+            preview=self.previews.get(session_id),
+            awaiting_approval=awaiting,
+            proposals=[proposal_projection(proposal) for proposal in proposals],
+        )
+
+    async def decide(self, session_id: str, proposal_id: str, action: ApprovalAction) -> RunItem:
+        async with self.lock:
+            self.require_session(session_id)
+            proposal = self.approvals.proposal(proposal_id)
+            if proposal is None or proposal.session_id != session_id:
+                raise WebError(404, "找不到这个提案。")
+            try:
+                prior = self.store.prior_run(
+                    session_id,
+                    action.request_id,
+                    proposal_id + action.version + action.decision,
+                    operation="approval",
+                )
+            except ValueError as error:
+                raise WebError(409, str(error)) from None
+            if prior is not None:
+                return prior
+            self.require_idle_session(session_id)
+            state = await self.state(session_id)
+            request = next(
+                (m for m in reversed(state.values.get("messages", [])) if isinstance(m, AIMessage)),
+                None,
+            )
+            if (
+                not (state.next or state.interrupts)
+                or request is None
+                or request.id != proposal.message_id
+            ):
+                raise WebError(409, "提案已不属于当前检查点, 请刷新会话。")
+            if action.decision == "approve" and (
+                (proposal.kind == "file" and not self.file_mutations)
+                or (
+                    proposal.kind == "command"
+                    and proposal.payload["args"]["executable"] not in self.allowed_executables
+                )
+            ):
+                raise WebError(409, "当前服务未启用此提案能力, 可拒绝提案后继续。")
+            try:
+                self.approvals.decide(proposal_id, action.version, action.decision)
+            except ValueError as error:
+                raise WebError(409, str(error)) from None
+        checkpoint = project_history(state).checkpoint_id
+        assert checkpoint is not None
+        return await self.start(
+            session_id,
+            CheckpointAction(checkpoint_id=checkpoint, request_id=action.request_id),
+            approval_text=proposal_id + action.version + action.decision,
         )
 
     async def activity_detail(self, session_id: str, event_id: int) -> StepDetail:
@@ -207,7 +284,7 @@ class Workbench:
                 break
             await asyncio.sleep(0.05)
         if after is None:
-            raise WebError(404, "这个节点的 checkpoint 快照暂不可用，请稍后重试。")  # noqa: RUF001
+            raise WebError(404, "这个节点的 checkpoint 快照暂不可用, 请稍后重试。")
 
         before_values = after.values if isinstance(after.values, Mapping) else {}
         after_values = before_values
@@ -228,38 +305,134 @@ class Workbench:
             snapshot_after=_display_snapshot(after_values, update),
         )
 
-    async def start(self, session_id: str, request: NewRun) -> RunItem:
+    def require_idle_session(self, session_id: str) -> SessionItem:
+        self.require_session(session_id)
+        item = self.store.session(session_id)
+        assert item is not None
+        if self.closing or self.coordinator.is_busy(session_id):
+            raise WebError(409, "会话正在运行或服务正在关闭。")
+        if item.archived:
+            raise WebError(409, "请先恢复已归档的会话。")
+        return item
+
+    async def checkpoints(self, session_id: str) -> list[CheckpointItem]:
+        self.require_session(session_id)
+        async with open_async_sqlite_checkpointer(self.database) as saver:
+            graph = build_async_tool_graph(saver)
+            snapshots = [
+                state
+                async for state in graph.aget_state_history(session_config(session_id), limit=200)
+            ]
+        result: list[CheckpointItem] = []
+        for state in snapshots:
+            if state.next or state.interrupts or state.values.get("status") != "completed":
+                continue
+            page = project_history(state)
+            if page.checkpoint_id is not None and state.created_at is not None:
+                preview = next(
+                    (item.text for item in reversed(page.messages) if item.role == "user"), ""
+                )
+                result.append(
+                    CheckpointItem(
+                        checkpoint_id=page.checkpoint_id,
+                        created_at=str(state.created_at),
+                        preview=preview[:120],
+                    )
+                )
+            if len(result) == 50:
+                break
+        return result
+
+    async def fork(self, session_id: str, request: CheckpointAction) -> SessionItem:
+        async with self.lock:
+            source = self.require_idle_session(session_id)
+            try:
+                target = self.store.branch_target(
+                    session_id, request.request_id, request.checkpoint_id
+                )
+            except ValueError as error:
+                raise WebError(409, str(error)) from None
+            async with open_async_sqlite_checkpointer(self.database) as saver:
+                graph = build_async_tool_graph(saver)
+                state = await graph.aget_state(checkpoint_config(session_id, request.checkpoint_id))
+                if state.created_at is None:
+                    raise WebError(404, "历史检查点不存在。")
+                if state.next or state.interrupts or state.values.get("status") != "completed":
+                    raise WebError(409, "只能从已完成的检查点创建分支。")
+                if target is None:
+                    target = uuid4().hex
+                    self.store.reserve_branch(
+                        session_id, request.request_id, request.checkpoint_id, target
+                    )
+                # A durable reservation allows retry after a crash without another branch.
+                if (await graph.aget_state(session_config(target))).created_at is None:
+                    # The terminal-state writer has the same channels and no runtime-dependent
+                    # tool routing. Updating state executes no model or tool node.
+                    await build_async_minimal_graph(saver).aupdate_state(
+                        session_config(target), state.values, as_node="model"
+                    )
+            item = self.store.session(target)
+            if item is None:
+                self.store.create(target, Path(source.workspace))
+                self.store.edit(target, SessionEdit(title=f"{source.title[:90]} · 分支"))
+            item = self.store.session(target)
+            assert item is not None
+            return item
+
+    async def start(
+        self,
+        session_id: str,
+        request: NewRun | CheckpointAction,
+        *,
+        approval_text: str | None = None,
+    ) -> RunItem:
         # Reserve and persist before returning 202; browser disconnect never owns this task.
         async with self.lock:
             self.require_session(session_id)
+            resume = isinstance(request, CheckpointAction)
+            text = request.checkpoint_id if isinstance(request, CheckpointAction) else request.text
+            operation: Literal["prompt", "resume", "approval"] = (
+                "approval" if approval_text else ("resume" if resume else "prompt")
+            )
+            if approval_text:
+                text = approval_text
             try:
-                prior = self.store.prior_run(session_id, request.request_id, request.text)
+                prior = self.store.prior_run(
+                    session_id, request.request_id, text, operation=operation
+                )
             except ValueError as error:
                 raise WebError(409, str(error)) from None
             if prior is not None:
                 return prior
             if self.closing or len(self.tasks) >= 4 or self.coordinator.is_busy(session_id):
                 raise WebError(409, "会话正在运行或服务繁忙, 请稍后重试。")
-            item = self.store.session(session_id)
-            if item is not None and item.archived:
-                raise WebError(409, "请先恢复已归档的会话。")
-            if (await self.state(session_id)).next:
-                raise WebError(409, "上一轮留下未完成检查点, 请新建会话继续。")
+            self.require_idle_session(session_id)
+            state = await self.state(session_id)
+            if any(p.status == "pending" for p in self.approvals.proposals(session_id)):
+                raise WebError(409, "请先批准或拒绝待审批提案。")
+            if isinstance(request, CheckpointAction):
+                current = project_history(state).checkpoint_id
+                if not (state.next or state.interrupts) or current != request.checkpoint_id:
+                    raise WebError(409, "检查点已变化或无需恢复, 请刷新会话。")
+            elif state.next or state.interrupts:
+                raise WebError(409, "上一轮留下未完成检查点, 请先继续运行或创建分支。")
             session_workspace = self.store.session_workspace(session_id).resolve()
             if not session_workspace.is_dir():
-                raise WebError(409, "此会话关联的工作区已不存在，请新建会话或重新配置工作区。")  # noqa: RUF001
+                raise WebError(409, "此会话关联的工作区已不存在, 请新建会话或重新配置工作区。")
             if self.database.resolve().is_relative_to(session_workspace):
-                raise WebError(409, "此会话工作区包含 Web 会话数据库，请新建会话。")  # noqa: RUF001
+                raise WebError(409, "此会话工作区包含 Web 会话数据库, 请新建会话。")
             run_id = uuid4().hex
             lease = self.coordinator.try_claim_run(session_id, run_id)
             try:
-                record = self.store.add_run(session_id, run_id, request.request_id, request.text)
+                record = self.store.add_run(
+                    session_id, run_id, request.request_id, text, operation=operation
+                )
                 self.store.event(session_id, run_id, "run_start")
             except BaseException:
                 await self.coordinator.cancel_run(session_id, run_id)
                 raise
             task = asyncio.create_task(
-                self._execute(lease, request.text, session_workspace, self.enabled_tools)
+                self._execute(lease, text, session_workspace, self.enabled_tools, resume=resume)
             )
             self.tasks[run_id] = task
             task.add_done_callback(lambda _task: self.tasks.pop(run_id, None))
@@ -271,6 +444,8 @@ class Workbench:
         text: str,
         workspace: Path,
         enabled_tools: tuple[str, ...],
+        *,
+        resume: bool = False,
     ) -> None:
         hooks = HookRegistry()
 
@@ -280,6 +455,18 @@ class Workbench:
             )
 
         hooks.register("web-activity", observe)
+
+        async def preview(update: TextPreview) -> None:
+            self.preview_revision += 1
+            self.previews[lease.session_id] = StreamingPreview(
+                run_id=lease.run_id,
+                message_id=update.message_id,
+                revision=self.preview_revision,
+                text=update.text,
+                status=update.status,
+                truncated=update.truncated,
+            )
+
         config = SessionRuntimeConfig(
             database=self.database,
             workspace=workspace,
@@ -287,8 +474,15 @@ class Workbench:
             enabled_tools=enabled_tools,
             tool_call_limits=self.tool_call_limits.copy(),
             instruction_filename=PI_INSTRUCTION_FILENAME,
-            prompt_template=f"{PI_WORKBENCH_SYSTEM_PROMPT}\n\n{{instructions}}",
+            prompt_template=workbench_prompt(
+                file_mutations=self.file_mutations, command_approval=bool(self.allowed_executables)
+            )
+            + "\n\n{instructions}",
             hooks=hooks,
+            text_observer=preview,
+            coding_executor=CodingExecutor(
+                self.approvals, workspace, self.file_mutations, self.allowed_executables
+            ),
             run_id=lease.run_id,
             cancellation_token=lease.cancellation_token,
             request_timeout_seconds=self.request_timeout,
@@ -306,9 +500,15 @@ class Workbench:
                         model=self.model,
                         content=text,
                         message_id=uuid4().hex,
+                        resume=resume,
                     ),
                 )
-            outcome = "completed" if result["status"] == "completed" else "failed"
+            pending_state = await self.state(lease.session_id)
+            outcome = (
+                "awaiting_approval"
+                if pending_state.interrupts
+                else ("completed" if result["status"] == "completed" else "failed")
+            )
             if outcome == "failed":
                 error = "本轮未完成, 请检查模型配置或查看工具结果。"
         except asyncio.CancelledError:
@@ -321,6 +521,7 @@ class Workbench:
             if lease.task is None:
                 await self.coordinator.cancel_run(lease.session_id, lease.run_id)
             self.store.finish(lease.run_id, outcome, error)
+            self.previews.pop(lease.session_id, None)
             self.store.event(lease.session_id, lease.run_id, "run_end", outcome=outcome)
 
     async def cancel(self, run_id: str) -> RunItem:

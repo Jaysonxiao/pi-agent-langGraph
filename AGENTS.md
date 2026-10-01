@@ -12,7 +12,7 @@ M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立�
 
 - `pi-agent --provider fake`：默认离线、确定性的**最小图**，不代表真实工具对话。
 - `pi-agent --provider compatible`：显式启用持久化异步模型/工具链；只读 `read`、`list`、`search` 受工作区限制。命令执行须先形成持久化提案，再由交互终端审批；没有直接文件写入入口。
-- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实 `read` / `list`；compatible 使用服务端模型配置。Web 提供会话、设置、SSE 阶段与节点详情，目前没有 Web 命令审批或逐 token 展示。
+- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实 `read` / `list`；compatible 使用服务端模型配置。Web 提供会话、设置、流式文本、节点详情、中断恢复与完成 checkpoint 分支，以及服务 status/stop/restart。文件修改和命令审批由启动参数显式启用；持久提案经过人工决策后才执行，结果不确定的操作不自动重放。
 - `pi-agent-server` / `pi-agent-client`：共享令牌认证的 loopback TCP 会话入口，服务端持有工作区、模型与数据库；不作为公网服务部署。
 
 Web 工作区指令使用 `PI-AGENTS.md`，**不加载根目录这个 Codex 用的 `AGENTS.md`**；CLI/TCP 的上下文管线仍使用工作区 `AGENTS.md`。见 `docs/pi-agents.md`。
@@ -25,7 +25,7 @@ Web 工作区指令使用 `PI-AGENTS.md`，**不加载根目录这个 Codex 用�
 - `sessions/`、`context/`：SQLite 检查点、会话元数据、规则装配与压缩。
 - `events/`、`extensions/`、`telemetry/`、`evals/`：过程投影、Hook、脱敏观测与评测。
 - `cli/`、`protocol/`、`server/`、`client/`：终端入口及本机协议链。
-- `web/`、`web-ui/`：Web 后端与 React/TypeScript 前端；`scripts/start-web.ps1` 安装、构建并启动。生成的 `src/pi_agent/web/static/` 不入 Git。
+- `web/`、`web-ui/`：Web 后端与 React/TypeScript 前端；`scripts/start-web.ps1`（Windows）和 `scripts/start-web.sh`（macOS/Linux）安装、构建并启动。生成的 `src/pi_agent/web/static/` 不入 Git。
 - `tests/`：按领域对应源码的 pytest；`web-ui/e2e/` 为浏览器测试。
 
 让领域逻辑与图编排、存储、Provider 和 UI 保持分离。修改跨模块行为时沿具体请求追踪上游输入、状态变化、输出和失败路径，并检查相应测试。

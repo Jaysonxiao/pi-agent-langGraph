@@ -20,6 +20,23 @@ class NewRun(InputModel):
     request_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
+class CheckpointAction(InputModel):
+    checkpoint_id: str = Field(min_length=1, max_length=255)
+    request_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
+class CheckpointItem(BaseModel):
+    checkpoint_id: str
+    created_at: str
+    preview: str
+
+
+class ApprovalAction(InputModel):
+    version: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
+    decision: Literal["approve", "reject"]
+    request_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
 class SessionEdit(InputModel):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     archived: bool | None = None
@@ -50,7 +67,9 @@ class SessionItem(BaseModel):
     updated_at: str
 
 
-RunStatus = Literal["running", "completed", "failed", "cancelled", "needs_recovery"]
+RunStatus = Literal[
+    "running", "completed", "failed", "cancelled", "needs_recovery", "awaiting_approval"
+]
 
 
 class RunItem(BaseModel):
@@ -87,6 +106,15 @@ class MessagePage(BaseModel):
     next_before: int | None
 
 
+class StreamingPreview(BaseModel):
+    run_id: str
+    message_id: str
+    revision: int
+    text: str
+    status: Literal["streaming", "complete", "discarded"]
+    truncated: bool
+
+
 class SessionView(BaseModel):
     session: SessionItem
     server_epoch: str
@@ -94,3 +122,6 @@ class SessionView(BaseModel):
     needs_recovery: bool
     history: MessagePage
     activities: list[Activity]
+    preview: StreamingPreview | None = None
+    awaiting_approval: bool = False
+    proposals: list[dict[str, Any]] = Field(default_factory=list)

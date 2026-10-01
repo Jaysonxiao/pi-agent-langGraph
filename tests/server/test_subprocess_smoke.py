@@ -26,7 +26,10 @@ def test_public_server_and_client_processes_reopen_session(tmp_path: Path) -> No
     async def start_server(port: int = 0) -> tuple[asyncio.subprocess.Process, int]:
         env = os.environ.copy()
         env["PI_AGENT_REMOTE_TOKEN"] = TOKEN
-        flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        if sys.platform == "win32":
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            flags = 0
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
@@ -76,7 +79,7 @@ def test_public_server_and_client_processes_reopen_session(tmp_path: Path) -> No
 
     async def stop_server(process: asyncio.subprocess.Process) -> None:
         if process.returncode is None:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 process.send_signal(signal.CTRL_BREAK_EVENT)
             else:
                 process.send_signal(signal.SIGTERM)

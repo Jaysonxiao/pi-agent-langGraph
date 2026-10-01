@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from pi_agent.sessions.metadata import SqliteSessionCatalog
 from pi_agent.web.schemas import (
@@ -51,6 +52,10 @@ class WebStore:
                     settings_id INTEGER PRIMARY KEY CHECK(settings_id=1),
                     workspace TEXT NOT NULL, tools_json TEXT NOT NULL,
                     tool_limits_json TEXT NOT NULL DEFAULT '{}');
+                CREATE TABLE IF NOT EXISTS web_branches (
+                    source_session_id TEXT NOT NULL, request_id TEXT NOT NULL,
+                    checkpoint_id TEXT NOT NULL, target_session_id TEXT NOT NULL,
+                    PRIMARY KEY(source_session_id, request_id));
             """)
             columns = {row["name"] for row in db.execute("PRAGMA table_info(web_sessions)")}
             if "workspace" not in columns:
@@ -62,6 +67,11 @@ class WebStore:
                 db.execute(
                     "ALTER TABLE web_settings ADD COLUMN tool_limits_json "
                     "TEXT NOT NULL DEFAULT '{}'"
+                )
+            run_columns = {row["name"] for row in db.execute("PRAGMA table_info(web_runs)")}
+            if "operation" not in run_columns:
+                db.execute(
+                    "ALTER TABLE web_runs ADD COLUMN operation TEXT NOT NULL DEFAULT 'prompt'"
                 )
 
     @contextmanager
@@ -162,7 +172,34 @@ class WebStore:
                     (int(edit.archived), session_id),
                 )
 
-    def prior_run(self, session_id: str, request_id: str, text: str) -> RunItem | None:
+    def branch_target(self, source: str, request_id: str, checkpoint: str) -> str | None:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT checkpoint_id,target_session_id FROM web_branches "
+                "WHERE source_session_id=? AND request_id=?",
+                (source, request_id),
+            ).fetchone()
+        if row is None:
+            return None
+        if row["checkpoint_id"] != checkpoint:
+            raise ValueError("同一请求标识不能用于不同检查点。")
+        return str(row["target_session_id"])
+
+    def reserve_branch(self, source: str, request_id: str, checkpoint: str, target: str) -> None:
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO web_branches VALUES (?,?,?,?)",
+                (source, request_id, checkpoint, target),
+            )
+
+    def prior_run(
+        self,
+        session_id: str,
+        request_id: str,
+        text: str,
+        *,
+        operation: Literal["prompt", "resume", "approval"] = "prompt",
+    ) -> RunItem | None:
         with self.connect() as db:
             row = db.execute(
                 "SELECT * FROM web_runs WHERE session_id=? AND request_id=?",
@@ -170,20 +207,31 @@ class WebStore:
             ).fetchone()
         if row is None:
             return None
-        if row["content_hash"] != self._hash(text):
+        if row["content_hash"] != self._hash(text) or row["operation"] != operation:
             raise ValueError("同一请求标识不能用于不同内容。")
         return RunItem.model_validate(dict(row))
 
-    def add_run(self, session_id: str, run_id: str, request_id: str, text: str) -> RunItem:
+    def add_run(
+        self,
+        session_id: str,
+        run_id: str,
+        request_id: str,
+        text: str,
+        *,
+        operation: Literal["prompt", "resume", "approval"] = "prompt",
+    ) -> RunItem:
         with self.connect() as db:
             db.execute(
-                "INSERT INTO web_runs VALUES (?, ?, ?, ?, 'running', ?, NULL, NULL)",
-                (run_id, session_id, request_id, self._hash(text), now()),
+                "INSERT INTO web_runs(run_id,session_id,request_id,content_hash,status,"
+                "created_at,finished_at,error,operation) "
+                "VALUES (?, ?, ?, ?, 'running', ?, NULL, NULL, ?)",
+                (run_id, session_id, request_id, self._hash(text), now(), operation),
             )
-            db.execute(
-                "UPDATE web_sessions SET title=? WHERE session_id=? AND title='新会话'",
-                (text[:40], session_id),
-            )
+            if operation == "prompt":
+                db.execute(
+                    "UPDATE web_sessions SET title=? WHERE session_id=? AND title='新会话'",
+                    (text[:40], session_id),
+                )
         self.catalog.record_session(session_id)
         result = self.run(run_id)
         assert result is not None

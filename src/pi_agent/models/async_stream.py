@@ -39,6 +39,7 @@ async def collect_async_response(
         message = AIMessage(content="".join(text_parts), tool_calls=tool_calls)
         # 只认最后一个 chunk 的 usage; 前段临时计数不当最终计费, 缺失则记 unknown.
         terminal_usage = collected[-1].usage_metadata
+        message.usage_metadata = terminal_usage
         usage_ledger.record_final(
             attempt_id,
             terminal_usage if isinstance(terminal_usage, Mapping) else None,

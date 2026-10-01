@@ -1,10 +1,13 @@
-export interface Config { workspace: string; provider: string; model: string; server_epoch: string; capabilities: string[]; tool_limits: Record<'read' | 'list' | 'search', number> }
+export interface Config { workspace: string; provider: string; model: string; server_epoch: string; capabilities: string[]; tool_limits: Record<'read' | 'list' | 'search', number>; approval_capabilities: string[]; allowed_executables: string[] }
 export interface Session { session_id: string; title: string; workspace: string; archived: boolean; created_at: string; updated_at: string }
-export interface Run { run_id: string; session_id: string; request_id: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_recovery'; error: string | null }
+export interface Run { run_id: string; session_id: string; request_id: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_recovery' | 'awaiting_approval'; error: string | null }
 export interface Message { message_id: string; role: 'user' | 'assistant' | 'tool'; text: string; tool_name: string | null; truncated: boolean }
 export interface Page { messages: Message[]; checkpoint_id: string | null; next_before: number | null }
 export interface Activity { event_id: number; session_id: string; run_id: string; phase: string; tool_name: string | null; outcome: string | null; created_at: string }
-export interface View { session: Session; server_epoch: string; run: Run | null; needs_recovery: boolean; history: Page; activities: Activity[] }
+export interface Preview { run_id: string; message_id: string; revision: number; text: string; status: 'streaming' | 'complete' | 'discarded'; truncated: boolean }
+export interface Checkpoint { checkpoint_id: string; created_at: string; preview: string }
+export interface Proposal { proposal_id: string; version: string; kind: 'file' | 'command'; status: string; workspace: string; operation: string; path: string | null; diff: string | null; before_text: string | null; after_text: string | null; args: { executable: string; argv: string[]; timeout_seconds: number } | null; result: Record<string, unknown> | null }
+export interface View { session: Session; server_epoch: string; run: Run | null; needs_recovery: boolean; history: Page; activities: Activity[]; preview: Preview | null; awaiting_approval: boolean; proposals: Proposal[] }
 export interface StepMessage { role: 'user' | 'assistant' | 'tool'; text: string; tool_name?: string; tool_calls?: { name: string; args: Record<string, string | number | boolean> }[] }
 export interface StepDetail { event_id: number; title: string; node: string; input: StepMessage[]; output: StepMessage[]; snapshot_before: Record<string, unknown>; snapshot_after: Record<string, unknown> }
 
@@ -30,6 +33,12 @@ export function mergeActivities(current: Activity[], incoming: Activity[]): Acti
   return [...entries.values()].sort((a, b) => a.event_id - b.event_id).slice(-256);
 }
 
+export function mergePreview(current: Preview | null, incoming: Preview | null): Preview | null {
+  if (current && incoming && current.run_id === incoming.run_id && current.revision > incoming.revision) return current;
+  return incoming;
+}
+
 export const statusLabels = {
   running: '正在运行', completed: '已完成', failed: '运行失败', cancelled: '已停止', needs_recovery: '需要核对',
+  awaiting_approval: '等待审批',
 };

@@ -107,7 +107,17 @@ class AsyncioSpawnedProcess:
     async def terminate_tree(self) -> None:
         """Delegate to the platform tree policy instead of the direct child only."""
         try:
-            await terminate_async_process_tree(self._process, platform=sys.platform)
+            if self._process.returncode is not None:
+                if sys.platform == "win32":
+                    # taskkill cannot identify descendants once the parent PID has exited.
+                    raise OSError("Exited parent no longer identifies its descendants.")
+                # An exited parent can leave descendants holding our stdout/stderr open.
+                with suppress(ProcessLookupError):
+                    _kill_process_group(self._process.pid, signal.SIGTERM)
+                    await asyncio.sleep(0.1)
+                    _kill_process_group(self._process.pid, signal.SIGKILL)
+            else:
+                await terminate_async_process_tree(self._process, platform=sys.platform)
         except OSError as exc:
             # Failure to kill descendants must never masquerade as a successful
             # timeout. Reap the direct child and release our pipe handles.

@@ -6,6 +6,7 @@
 """
 
 import os
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,7 @@ def apply_approved_file_change(
         )
 
     tmp_path: Path | None = None
+    previous_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else None
     replaced = False
     try:
         try:
@@ -70,6 +72,8 @@ def apply_approved_file_change(
                 stream.write(change["after_text"])
                 stream.flush()
                 os.fsync(stream.fileno())  # 先刷到磁盘, 再替换可见目标.
+            if previous_mode is not None:
+                os.chmod(tmp_path, previous_mode)
             os.replace(tmp_path, target)
             replaced = True
         except OSError as exc:

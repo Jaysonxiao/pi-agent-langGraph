@@ -57,6 +57,10 @@ class CompatibleAsyncChatModel:
     def supports_tool_binding(self) -> bool:
         return callable(getattr(self._client, "bind_tools", None))
 
+    @property
+    def supports_streaming(self) -> bool:
+        return isinstance(self._client, AsyncStreamingProviderClient)
+
     def bind_tools(self, tools: Sequence[Mapping[str, object]]) -> CompatibleAsyncChatModel:
         """Bind only clients that can transmit tool schemas to the provider."""
         binder = getattr(self._client, "bind_tools", None)
@@ -95,8 +99,9 @@ class CompatibleAsyncChatModel:
         """Forward a native stream while keeping provider failures sanitized."""
         if not isinstance(self._client, AsyncStreamingProviderClient):
             raise ModelProviderError("provider_call_failed", "StreamingNotSupported")
+        chunks = self._client.astream(messages, config)
         try:
-            async for chunk in self._client.astream(messages, config):
+            async for chunk in chunks:
                 if not isinstance(chunk, AIMessageChunk):
                     raise ModelProviderError("invalid_response", type(chunk).__name__)
                 yield chunk
@@ -106,6 +111,10 @@ class CompatibleAsyncChatModel:
             raise
         except Exception as exc:
             raise ModelProviderError("provider_call_failed", type(exc).__name__) from None
+        finally:
+            close = getattr(chunks, "aclose", None)
+            if callable(close):
+                await close()
 
     async def aclose(self) -> None:
         """Close the owned async client at the runtime boundary."""

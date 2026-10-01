@@ -7,7 +7,9 @@ from itertools import count
 from pi_agent.context.runtime import ContextConfig
 from pi_agent.extensions.hooks import HookEvent, HookOutcome, HookPhase, HookRegistry
 from pi_agent.models.async_base import AsyncChatModel
+from pi_agent.models.streaming import TextObserver
 from pi_agent.runtime.cancellation import AsyncCancellationToken
+from pi_agent.runtime.coding import CodingExecutor
 from pi_agent.runtime.policy import RetryPolicy
 from pi_agent.tools.async_registry import AsyncToolRegistry
 
@@ -25,6 +27,8 @@ class AsyncRunContext:
     tool_call_counts: dict[str, int] = field(default_factory=dict)
     retry_policy: RetryPolicy | None = None
     request_timeout_seconds: float | None = None
+    text_observer: TextObserver | None = None
+    coding_executor: CodingExecutor | None = None
     # hook 关联信息只活在运行依赖里, 不进 AgentState / checkpoint.
     hooks: HookRegistry | None = None
     thread_id: str | None = None

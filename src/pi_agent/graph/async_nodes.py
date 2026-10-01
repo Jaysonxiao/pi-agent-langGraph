@@ -5,6 +5,7 @@ from time import monotonic
 
 from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.config import get_config
+from langgraph.errors import GraphInterrupt
 from langgraph.runtime import Runtime
 
 from pi_agent.context.async_runtime import prepare_model_messages_async
@@ -12,6 +13,8 @@ from pi_agent.domain.state import AgentState, AgentStateUpdate
 from pi_agent.extensions.hooks import HookOutcome
 from pi_agent.graph.async_context import AsyncRunContext
 from pi_agent.graph.nodes import _latest_tool_request
+from pi_agent.models.async_adapter import AsyncStreamingProviderClient
+from pi_agent.models.streaming import stream_response
 from pi_agent.runtime.async_retry import arun_with_retry
 from pi_agent.runtime.runner import run_cancellable
 from pi_agent.tools.registry import _require_call_id, create_error_tool_message
@@ -47,6 +50,13 @@ async def async_model_node(
         # langgraph.runtime.get_config 与此为同一函数; 把当前图 config 交给 ainvoke.
         async def request() -> AIMessage:
             async def invoke() -> AIMessage:
+                observer = runtime.context.text_observer
+                model = runtime.context.model
+                if observer is not None and (
+                    isinstance(model, AsyncStreamingProviderClient)
+                    and getattr(model, "supports_streaming", True)
+                ):
+                    return await stream_response(model, model_messages, get_config(), observer)
                 return await runtime.context.model.ainvoke(model_messages, get_config())
 
             timeout = runtime.context.request_timeout_seconds
@@ -109,6 +119,7 @@ async def async_tool_node(
             tool_call_id=tool_call_id,
         )
         outcome: HookOutcome = "failed"
+        interrupted = False
         try:
             limit = runtime.context.tool_call_limits.get(tool_name)
             count = runtime.context.tool_call_counts.get(tool_name, 0)
@@ -123,9 +134,18 @@ async def async_tool_node(
                 )
             else:
                 runtime.context.tool_call_counts[tool_name] = count + 1
-                result = await runtime.context.tools.execute_call(
-                    call, runtime.context.cancellation_token
-                )
+                executor = runtime.context.coding_executor
+                if executor is not None and tool_name in {"write", "edit", "propose_command"}:
+                    result = await executor.execute(
+                        call,
+                        session=str(runtime.context.thread_id),
+                        message=str(assistant_message.id),
+                        token=runtime.context.cancellation_token,
+                    )
+                else:
+                    result = await runtime.context.tools.execute_call(
+                        call, runtime.context.cancellation_token
+                    )
                 # ToolMessage.status 是 success/error, hook 只映射成 completed/failed.
                 outcome = "completed" if result.status == "success" else "failed"
             results.append(result)
@@ -133,14 +153,18 @@ async def async_tool_node(
             # 取消不投影半截 ToolMessage; after_tool 记 cancelled 后继续冒泡.
             outcome = "cancelled"
             raise
+        except GraphInterrupt:
+            interrupted = True
+            raise
         finally:
-            await runtime.context.dispatch_hook(
-                "after_tool",
-                node="tools",
-                outcome=outcome,
-                tool_name=tool_name,
-                tool_call_id=tool_call_id,
-            )
+            if not interrupted:
+                await runtime.context.dispatch_hook(
+                    "after_tool",
+                    node="tools",
+                    outcome=outcome,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                )
     return {
         "messages": results,
         "status": "ready",

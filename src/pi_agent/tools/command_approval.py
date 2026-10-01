@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
 from pi_agent.runtime.cancellation import AsyncCancellationToken
 from pi_agent.security import WorkspacePathPolicy
@@ -52,6 +53,21 @@ class CommandApprovalStore:
                         result_json TEXT
                     )"""
                 )
+                columns = {
+                    row[1] for row in connection.execute("PRAGMA table_info(command_proposals)")
+                }
+                for name, declaration in {
+                    "kind": "TEXT NOT NULL DEFAULT 'command'",
+                    "payload_json": "TEXT",
+                    "message_id": "TEXT",
+                    "tool_call_id": "TEXT",
+                    "version": "TEXT",
+                    "decision": "TEXT",
+                }.items():
+                    if name not in columns:
+                        connection.execute(
+                            f"ALTER TABLE command_proposals ADD COLUMN {name} {declaration}"
+                        )
                 yield connection
         finally:
             connection.close()
@@ -86,7 +102,7 @@ class CommandApprovalStore:
         with self._connect() as connection:
             row = connection.execute(
                 """SELECT session_id, workspace, args_json, status
-                FROM command_proposals WHERE proposal_id = ?""",
+                FROM command_proposals WHERE proposal_id = ? AND kind='command'""",
                 (proposal_id,),
             ).fetchone()
         if row is None:
@@ -122,10 +138,10 @@ class CommandApprovalStore:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """SELECT session_id, workspace, args_json, status
-                FROM command_proposals WHERE proposal_id = ?""",
+                FROM command_proposals WHERE proposal_id = ? AND kind='command'""",
                 (proposal_id,),
             ).fetchone()
-            if row is None or row[3] != "pending":
+            if row is None or row[3] not in {"pending", "approved"}:
                 raise ValueError("Command proposal is not pending; execution is not repeatable.")
             if expected is not None and (
                 expected.proposal_id != proposal_id
@@ -145,19 +161,23 @@ class CommandApprovalStore:
             )
         return CommandProposal(proposal_id, row[0], row[1], args, "claimed")
 
-    def finish(self, proposal_id: str, result: ProcessResult) -> None:
+    def finish(
+        self, proposal_id: str, result: ProcessResult, *, elapsed_seconds: float | None = None
+    ) -> None:
         with self._connect() as connection:
-            connection.execute(
-                """UPDATE command_proposals SET status = 'completed', result_json = ?
+            payload = result.model_dump()
+            payload["elapsed_seconds"] = elapsed_seconds
+            changed = connection.execute(
+                """UPDATE command_proposals SET status = ?, result_json = ?
                 WHERE proposal_id = ? AND status = 'claimed'""",
                 (
-                    json.dumps(
-                        {"returncode": result.returncode, "timed_out": result.timed_out},
-                        separators=(",", ":"),
-                    ),
+                    "completed" if result.returncode == 0 else "failed",
+                    json.dumps(payload, ensure_ascii=False),
                     proposal_id,
                 ),
-            )
+            ).rowcount
+            if changed != 1:
+                raise ValueError("Claimed command result cannot be recorded again.")
 
 
 def create_command_proposal_tool(
@@ -197,17 +217,19 @@ async def execute_claimed_command(
     workspace: WorkspacePathPolicy,
     allowed_executables: frozenset[str],
     output_budget: TextOutputBudget | None = None,
+    cancellation_token: AsyncCancellationToken | None = None,
 ) -> ProcessResult:
     """Execute exactly the claimed argv in the proposed authorized workspace."""
     from pi_agent.tools.async_process import run_controlled_async_process_result
 
+    started = monotonic()
     result = await run_controlled_async_process_result(
         proposal.args,
         allowed_executables=allowed_executables,
         cwd=proposal.workspace,
         workspace=workspace,
-        token=AsyncCancellationToken(),
+        token=cancellation_token or AsyncCancellationToken(),
         output_budget=output_budget or TextOutputBudget(),
     )
-    store.finish(proposal.proposal_id, result)
+    store.finish(proposal.proposal_id, result, elapsed_seconds=monotonic() - started)
     return result

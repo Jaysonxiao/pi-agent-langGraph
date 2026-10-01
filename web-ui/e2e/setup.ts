@@ -15,9 +15,11 @@ export default async function setup() {
   const workspace = resolve(root, '.pi-agent/web-e2e-workspace');
   mkdirSync(workspace, { recursive: true });
   writeFileSync(resolve(workspace, 'README.md'), '# Browser test project\n\nThe web workbench reads real files.\n');
+  writeFileSync(resolve(workspace, 'stream.txt'), 'Streaming browser probe.\n'.repeat(50));
   const python = resolve(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
   const child = spawn(python, ['-m', 'pi_agent.web.app', '--provider', 'fake', '--workspace', workspace,
-    '--database', resolve(root, `.pi-agent/e2e-${Date.now()}.sqlite`), '--port', '8776'], {
+    '--database', resolve(root, `.pi-agent/e2e-${Date.now()}.sqlite`), '--port', '8776',
+    '--enable-file-mutations', '--allow-executable', python], {
     cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';

@@ -6,6 +6,7 @@
 - 学习者基础：具备 Python 基础，学习过 LangChain/LangGraph 常规用法；目标是能独立设计、实现和审查 Agent 系统。
 - 进度：M0–M10 已按各自交付范围归档。M10 离线本机范围于 2026-09-28 完成归档复验，组合 **133 passed**、全仓非 live **565 passed、4 deselected**；范围和遗留见 [M10 归档](docs/acceptance/M10.md)。M8 的跨平台/真实故障注入与 M9 的 live/default CLI 边界仍按各自记录跟踪。
 - 最近里程碑：M11 于 2026-09-29 按本地交付范围完成用户验收并归档。M11.1 的学习者练习 `collect_tool_names()` 已完成；M11.1–M11.4、本机 compatible 手工场景和 4 项 live tests 均有记录。新环境 Windows/Linux 与真实服务部署验证保留为后置 D1–D3；真实请求对应的 telemetry 文件脱敏检查及配置投影输出没有单独留存。详细结论以 [PLAN](PLAN.md) 和 [M11 归档](docs/acceptance/M11.md) 为准。
+- 独立 Web 后续：2026-10-01 按用户要求先计划再直接开发，完成 Bash 启动、显式中断恢复、完成 checkpoint 分支和流式文本；macOS 本机离线验证完成，详见[计划与执行记录](docs/design/web-continuation.md)。恢复以新 run 明确授权继续待完成的只读节点；分支只复制完成状态。流式正文走独立临时预览，完整响应才进入持久图状态，不进入 lifecycle telemetry。
 - 当前能力：默认 fake CLI 仍使用无持久化最小图；显式 compatible CLI 已连通异步只读工具图、受控模型重试/时限、SQLite 会话与节点事件。命令仅能由模型提案，再由人审入口执行；文件写入仍是独立 M4 审批边界。完整闭环、证据和限制见 [M8 纠正记录](docs/acceptance/M8-closure.md)。
 - 状态唯一来源：[PLAN.md](PLAN.md)。本日志只总结学习和决策；旧过程流水见 [整理前快照](docs/history/2026-09-18-before-m5-archive/README.md)。
 
@@ -344,7 +345,7 @@ M11.4 已补齐全链路架构图、Pi 源码因果映射、LangGraph/checkpoint
 | 后续真实模型质量评测 | 供应商 tokenizer、多模态计费与真实摘要语义质量 | M7 已验收确定性估算/假模型调用与恢复；后续用真实 provider 做质量和容量评测 |
 | M8 跨环境复验 | POSIX 实进程树、真实 429/传输中取消、命令 `claimed` 后崩溃核对 | [M8 纠正记录](docs/acceptance/M8-closure.md) 与 [剩余清单](docs/follow-ups/M1-M8.md) |
 | 生产持久化 | SQLite 仅为开发存储；checkpoint 与 metadata 跨连接写入不是原子事务；CLI 无默认数据库策略 | 保留为后续生产化设计，不反向扩张 M6 归档范围 |
-| M9 归档后 / M11 | M9 未关闭边界和全系统验收 | M10 已归档；M11.1 当前处理工具评测证据，telemetry、跨平台、性能与复盘按 [M11 计划](PLAN.md) 顺序推进 |
+| M9 归档后 / M11 | 真实模型质量、独立环境/部署与 telemetry 负载边界 | M11 已完成本地 tools eval、CLI telemetry、性能样本与架构复盘；后置项按 [M11 验收](docs/acceptance/M11.md) 跟踪 |
 
 ## 本次整理记录与后续写法
 
@@ -359,3 +360,10 @@ M11.4 已补齐全链路架构图、Pi 源码因果映射、LangGraph/checkpoint
 2026-09-23：按用户要求先归档 M8 已交付范围；2026-09-24：核对 M1–M8 文档与源码、Git 和离线门禁，统一索引、阶段总结、问题修订与后续清单。原始长篇切片过程保存在 [整理前快照](docs/history/2026-09-23-m1-m8-review/INDEX.md)，不再作为当前待办。
 
 以后一个里程碑一个总结段；新进展更新对应段落。当前快照仅有一份，详细验证只写对应验收文件。历史测试数必须标注时间和范围，归档不得把教学版局限写成生产级保证。
+
+
+## 2026-10-01：Web 服务管理与持久审批
+
+用户选择后续任务 1、2、4、5，先完成依赖计划，再授权直接开发。暂停进程仍持有数据库锁，因此服务管理要验证进程启动身份并通过实例令牌优雅停止，不能靠删除锁文件。文件和命令复用同一持久提案表；LangGraph 的多工具节点恢复会重入，需要保持 interrupt 次序并绑定提案 ID，结果消息也要绑定操作身份，避免重复 tool-call ID 覆盖历史。
+
+批准与副作用不是同一事务：先认领、后执行、再存结果；崩溃或记录失败产生 uncertain，人工核对，不能自动重放。取消只表示停止继续执行，不会撤销已经发生的外部效果。当前本机严格回归、浏览器审批与真实 Web gate 已有证据；平台 CI 与用户验收另列，详见 [独立验收记录](docs/acceptance/web-coding-2026-10-01.md)。

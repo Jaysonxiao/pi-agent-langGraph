@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import secrets
+import socket
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
@@ -14,15 +15,19 @@ from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from pi_agent.models.async_adapter import CompatibleAsyncChatModel
 from pi_agent.models.async_base import AsyncChatModel
 from pi_agent.models.config import ModelOptions, resolve_model_config
 from pi_agent.models.http_client import build_async_provider_client
+from pi_agent.web import lifecycle
 from pi_agent.web.demo import DemoModel
 from pi_agent.web.schemas import (
+    ApprovalAction,
+    CheckpointAction,
+    CheckpointItem,
     MessagePage,
     NewRun,
     RunItem,
@@ -52,6 +57,10 @@ def create_app(
     timeout: float = 120,
     request_timeout: float = 30,
     attempts: int = 3,
+    service_instance: dict[str, object] | None = None,
+    shutdown: Callable[[], None] | None = None,
+    file_mutations: bool = False,
+    allowed_executables: frozenset[str] = frozenset(),
 ) -> FastAPI:
     workspace = workspace.resolve()
     database = database.expanduser().resolve()
@@ -70,13 +79,24 @@ def create_app(
         timeout=timeout,
         request_timeout=request_timeout,
         attempts=attempts,
+        file_mutations=file_mutations,
+        allowed_executables=allowed_executables,
     )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        lease.acquire()
         try:
+            lease.acquire()
+        except Timeout:
+            raise RuntimeError(
+                f"数据库已被服务占用: {database}。使用 pi-agent-web status --database PATH "
+                "检查;旧服务请在原终端 fg 后 Ctrl+C 退出。"
+            ) from None
+        try:
+            if service_instance is not None:
+                lifecycle.publish(database, service_instance)
             workbench.store.recover()
+            workbench.approvals.recover_claims()
             yield
         finally:
             try:
@@ -86,6 +106,8 @@ def create_app(
                     if close_model is not None:
                         await close_model()
                 finally:
+                    if service_instance is not None:
+                        lifecycle.record_path(database).unlink(missing_ok=True)
                     lease.release()
 
     app = FastAPI(
@@ -93,6 +115,18 @@ def create_app(
     )
     app.state.workbench = workbench
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
+
+    @app.api_route("/_pi/service", methods=["GET", "POST"])
+    async def service_control(request: Request) -> JSONResponse:
+        if service_instance is None or not secrets.compare_digest(
+            request.headers.get("x-pi-service-token", ""), str(service_instance["token"])
+        ):
+            return JSONResponse({"detail": "访问拒绝。"}, status_code=403)
+        if request.method == "POST":
+            await workbench.close()
+            if shutdown is not None:
+                shutdown()
+        return JSONResponse({"instance_id": service_instance["instance_id"]})
 
     @app.middleware("http")
     async def guard(
@@ -211,6 +245,26 @@ def create_app(
     async def start_run(session_id: str, request: NewRun) -> RunItem:
         return await workbench.start(session_id, request)
 
+    @app.post("/api/sessions/{session_id}/resume", status_code=202)
+    async def resume_run(session_id: str, request: CheckpointAction) -> RunItem:
+        return await workbench.start(session_id, request)
+
+    @app.get("/api/sessions/{session_id}/proposals")
+    async def proposals(session_id: str) -> list[dict[str, object]]:
+        return (await workbench.view(session_id)).proposals
+
+    @app.post("/api/sessions/{session_id}/proposals/{proposal_id}/decision", status_code=202)
+    async def decide_proposal(session_id: str, proposal_id: str, action: ApprovalAction) -> RunItem:
+        return await workbench.decide(session_id, proposal_id, action)
+
+    @app.get("/api/sessions/{session_id}/checkpoints")
+    async def checkpoints(session_id: str) -> list[CheckpointItem]:
+        return await workbench.checkpoints(session_id)
+
+    @app.post("/api/sessions/{session_id}/branches", status_code=201)
+    async def fork_session(session_id: str, request: CheckpointAction) -> SessionItem:
+        return await workbench.fork(session_id, request)
+
     @app.get("/api/runs/{run_id}")
     async def get_run(run_id: str) -> RunItem:
         run = workbench.store.run(run_id)
@@ -232,7 +286,13 @@ def create_app(
             cursor = initial[-1].event_id if initial else 0
             yield f"event: sync\nid: {cursor}\ndata: {{}}\n\n"
             idle = 0
+            preview_revision = -1
             while not workbench.closing and not await request.is_disconnected():
+                preview = workbench.previews.get(session_id)
+                if preview is not None and preview.revision != preview_revision:
+                    preview_revision = preview.revision
+                    payload = preview.model_dump_json()
+                    yield f"event: preview\ndata: {payload}\n\n"
                 pending = workbench.store.events(session_id, cursor)
                 if pending:
                     cursor = pending[-1].event_id
@@ -240,10 +300,10 @@ def create_app(
                         [event.model_dump() for event in pending], ensure_ascii=False
                     )
                     yield f"event: activity\nid: {cursor}\ndata: {payload}\n\n"
-                elif idle % 20 == 0:
+                elif idle % 200 == 0:
                     yield ": heartbeat\n\n"
                 idle += 1
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.05 if workbench.coordinator.is_busy(session_id) else 0.3)
 
         return StreamingResponse(
             stream(),
@@ -270,14 +330,47 @@ def create_app(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pi-agent-web")
+    parser.add_argument(
+        "action", nargs="?", choices=["start", "status", "stop", "restart"], default="start"
+    )
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     parser.add_argument("--database", type=Path, default=default_web_database())
     parser.add_argument("--provider", choices=["fake", "compatible"])
     parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--enable-file-mutations", action="store_true")
+    parser.add_argument("--allow-executable", action="append", default=[])
+    parser.add_argument(
+        "--force", action="store_true", help="Force a verified service to stop after timeout"
+    )
     args = parser.parse_args(argv)
     try:
         import uvicorn
 
+        database = args.database.expanduser().resolve()
+        if args.action == "status":
+            print(json.dumps(lifecycle.status(database), ensure_ascii=False))
+            return 0
+        if args.action in {"stop", "restart"}:
+            lifecycle.stop_service(database, force=args.force)
+            if args.action == "stop":
+                print("Web service stopped.")
+                return 0
+        if not 1 <= args.port <= 65535:
+            raise ValueError("Port must be from 1 to 65535.")
+        if args.force and args.action == "start":
+            raise ValueError("--force is only available for stop/restart.")
+        if database.parent.exists() and lifecycle.locked(database):
+            raise ValueError(
+                f"数据库已被占用: {database}。先运行 pi-agent-web status/stop --database PATH;"
+                "旧版服务请在原终端 fg 后 Ctrl+C 退出。"
+            )
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", args.port))
+            except OSError:
+                raise ValueError(
+                    f"端口 {args.port} 已被占用, 请检查现有服务或指定 --port。"
+                ) from None
         config = resolve_model_config(ModelOptions(provider=args.provider), os.environ)
         model: AsyncChatModel
         close_model: Callable[[], Awaitable[None]] | None = None
@@ -286,6 +379,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             compatible = CompatibleAsyncChatModel(build_async_provider_client(config))
             model, close_model = compatible, compatible.aclose
+        server: uvicorn.Server
+
+        def shutdown() -> None:
+            server.should_exit = True
+
+        instance = lifecycle.new_instance(database, args.port)
         app = create_app(
             workspace=args.workspace,
             database=args.database,
@@ -296,17 +395,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             timeout=config.run_timeout_seconds,
             request_timeout=config.timeout_seconds,
             attempts=config.max_attempts,
+            service_instance=instance,
+            shutdown=shutdown,
+            file_mutations=args.enable_file_mutations,
+            allowed_executables=frozenset(args.allow_executable),
         )
         print(f"Pi Workbench: http://127.0.0.1:{args.port}")
-        uvicorn.run(
-            app,
-            host="127.0.0.1",
-            port=args.port,
-            access_log=False,
-            timeout_graceful_shutdown=5,
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app=app,
+                host="127.0.0.1",
+                port=args.port,
+                access_log=False,
+                timeout_graceful_shutdown=5,
+            )
         )
+        server.run()
+        if not server.started:
+            return 1
     except KeyboardInterrupt:
         return 130
+    except ValueError as error:
+        sys.stderr.write(f"Web: {error}\n")
+        return 1
     except Exception as error:
         sys.stderr.write(f"Web startup or shutdown failed: {type(error).__name__}.\n")
         return 1
