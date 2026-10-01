@@ -8,7 +8,7 @@ export default function ApprovalCard({ proposal, disabled, busy, decide }: {
 }) {
   const pending = proposal.status === 'pending';
   return <details className={`approval-card ${pending ? 'pending' : ''}`} open={pending || undefined}>
-    <summary><b>{proposal.kind === 'file' ? `文件${proposal.operation === 'edit' ? '修改' : proposal.before_text === null ? '创建' : '替换'} · ${proposal.path}` : '命令审批'}</b><span>{labels[proposal.status] ?? proposal.status}</span></summary>
+    <summary><b>{proposal.kind === 'file' ? `${proposal.operation} · ${proposal.path}` : 'command'}</b><span>{labels[proposal.status] ?? proposal.status}</span></summary>
     <div className="approval-body">
       <small>工作区</small><pre>{proposal.workspace}</pre>
       {proposal.kind === 'file' ? <>

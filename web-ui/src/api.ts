@@ -1,4 +1,4 @@
-export interface Config { workspace: string; provider: string; model: string; server_epoch: string; capabilities: string[]; tool_limits: Record<'read' | 'list' | 'search', number>; approval_capabilities: string[]; allowed_executables: string[] }
+export interface Config { workspace: string; provider: string; model: string; server_epoch: string; capabilities: string[]; available_tools: string[]; tool_limits: Record<'read' | 'list' | 'search', number>; approval_capabilities: string[]; allowed_executables: string[]; require_approval: boolean }
 export interface Session { session_id: string; title: string; workspace: string; archived: boolean; created_at: string; updated_at: string }
 export interface Run { run_id: string; session_id: string; request_id: string; status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_recovery' | 'awaiting_approval'; error: string | null }
 export interface Message { message_id: string; role: 'user' | 'assistant' | 'tool'; text: string; tool_name: string | null; truncated: boolean }
@@ -10,6 +10,10 @@ export interface Proposal { proposal_id: string; version: string; kind: 'file' |
 export interface View { session: Session; server_epoch: string; run: Run | null; needs_recovery: boolean; history: Page; activities: Activity[]; preview: Preview | null; awaiting_approval: boolean; proposals: Proposal[] }
 export interface StepMessage { role: 'user' | 'assistant' | 'tool'; text: string; tool_name?: string; tool_calls?: { name: string; args: Record<string, string | number | boolean> }[] }
 export interface StepDetail { event_id: number; title: string; node: string; input: StepMessage[]; output: StepMessage[]; snapshot_before: Record<string, unknown>; snapshot_after: Record<string, unknown> }
+
+export function toolLabel(name: string | null | undefined): string {
+  return name === 'propose_command' ? 'command' : name ?? '工具';
+}
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }

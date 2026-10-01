@@ -388,7 +388,7 @@ def test_disabled_capability_after_restart_allows_rejection_only(tmp_path: Path)
         login(client)
         sid = session(client)
         proposal = begin(client, sid)["proposals"][0]
-    with local_client(make_app(tmp_path, calls)) as client:
+    with local_client(make_app(tmp_path, calls, file_mutations=False)) as client:
         login(client)
         assert decision(client, sid, proposal).status_code == 409
         response = decision(client, sid, proposal, "reject", request="reject-disabled")

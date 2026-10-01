@@ -5,7 +5,9 @@ param(
     [string]$Database = '',
     [int]$Port = 8766,
     [switch]$Force,
-    [switch]$EnableFileMutations,
+    [switch]$EnableFileMutations = $true,
+    [bool]$RequireApproval = $true,
+    [switch]$DisableCommand,
     [string[]]$AllowExecutable = @()
 )
 
@@ -34,6 +36,10 @@ try {
         '--port', $Port)
     if ($Force) { $runArguments += '--force' }
     if ($EnableFileMutations) { $runArguments += '--enable-file-mutations' }
+    else { $runArguments += '--no-enable-file-mutations' }
+    if ($RequireApproval) { $runArguments += '--require-approval' }
+    else { $runArguments += '--no-require-approval' }
+    if ($DisableCommand) { $runArguments += '--disable-command' }
     foreach ($executable in $AllowExecutable) { $runArguments += @('--allow-executable', $executable) }
     if ($Database) { $runArguments += @('--database', $Database) }
     & uv @runArguments

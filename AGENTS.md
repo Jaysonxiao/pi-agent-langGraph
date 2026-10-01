@@ -12,7 +12,7 @@ M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立�
 
 - `pi-agent --provider fake`：默认离线、确定性的**最小图**，不代表真实工具对话。
 - `pi-agent --provider compatible`：显式启用持久化异步模型/工具链；只读 `read`、`list`、`search` 受工作区限制。命令执行须先形成持久化提案，再由交互终端审批；没有直接文件写入入口。
-- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实 `read` / `list`；compatible 使用服务端模型配置。Web 提供会话、设置、流式文本、节点详情、中断恢复与完成 checkpoint 分支，以及服务 status/stop/restart。文件修改和命令审批由启动参数显式启用；持久提案经过人工决策后才执行，结果不确定的操作不自动重放。
+- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实工具；compatible 使用服务端模型配置。Web 提供会话、设置、流式文本、节点详情、中断恢复与完成 checkpoint 分支，以及服务 status/stop/restart。六项工具默认选中，页面取消选择从下一轮生效。write/edit/command 默认人工审批，`--no-require-approval` 可关闭新操作审批；默认命令程序为系统 shell，自定义 allowlist 可替换。操作仍持久认领，结果不确定时不自动重放；旧待审批提案不随新参数自动批准。
 - `pi-agent-server` / `pi-agent-client`：共享令牌认证的 loopback TCP 会话入口，服务端持有工作区、模型与数据库；不作为公网服务部署。
 
 Web 工作区指令使用 `PI-AGENTS.md`，**不加载根目录这个 Codex 用的 `AGENTS.md`**；CLI/TCP 的上下文管线仍使用工作区 `AGENTS.md`。见 `docs/pi-agents.md`。

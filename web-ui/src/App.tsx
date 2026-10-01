@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Activity as ActivityIcon, Archive, ArrowDown, ArrowRight, ArrowUp, Check, ChevronDown, CircleHelp, Code2, Copy, FileText, Folder, Loader2, Menu, MessageSquare, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, RotateCcw, Search, Settings, Square, Terminal, WifiOff, X } from 'lucide-react';
-import { api, ApiError, mergeActivities, mergePreview, statusLabels, type Activity, type Checkpoint, type Config, type Message, type Page, type Preview, type Proposal, type Run, type Session, type StepDetail, type View } from './api';
+import { api, ApiError, mergeActivities, mergePreview, statusLabels, toolLabel, type Activity, type Checkpoint, type Config, type Message, type Page, type Preview, type Proposal, type Run, type Session, type StepDetail, type View } from './api';
 import ApprovalCard from './ApprovalCard';
+import ToolSettings from './ToolSettings';
 
 const prompts = [
   { icon: MessageSquare, title: '梳理一个想法', detail: '拆开目标与约束', text: '我有一个想法：……请帮我梳理目标、约束和下一步。' },
@@ -19,7 +20,7 @@ function MessageBubble({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
   if (!message.text) return null;
   if (message.role === 'tool') return <details className="tool-result">
-    <summary><Terminal size={14} /><span>{message.tool_name ?? '工具'} 执行结果</span><ChevronDown size={14} /></summary>
+    <summary><Terminal size={14} /><span>{toolLabel(message.tool_name)} 执行结果</span><ChevronDown size={14} /></summary>
     <pre>{message.text}</pre>{message.truncated && <small>内容较长，已截断展示。</small>}
   </details>;
   return <article className={`message ${message.role}`}>
@@ -36,12 +37,12 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 function phaseLabel(item: Activity): string {
-  const labels: Record<string, string> = { run_start: '任务开始', before_model: '正在生成回复', after_model: '模型响应完成', before_tool: `调用 ${item.tool_name}`, after_tool: `${item.tool_name} 返回结果`, run_end: item.outcome === 'completed' ? '任务完成' : item.outcome === 'cancelled' ? '任务已停止' : item.outcome === 'awaiting_approval' ? '等待人工审批' : '任务未完成' };
+  const labels: Record<string, string> = { run_start: '任务开始', before_model: '正在生成回复', after_model: '模型响应完成', before_tool: `调用 ${toolLabel(item.tool_name)}`, after_tool: `${toolLabel(item.tool_name)} 返回结果`, run_end: item.outcome === 'completed' ? '任务完成' : item.outcome === 'cancelled' ? '任务已停止' : item.outcome === 'awaiting_approval' ? '等待人工审批' : '任务未完成' };
   return labels[item.phase] ?? item.phase;
 }
 
 function StepMessages({ label, messages }: { label: string; messages: StepDetail['input'] }) {
-  return <section className="step-messages"><h3>{label}</h3>{messages.length ? messages.map((message, index) => <article key={`${message.role}-${index}`}><small>{message.role === 'user' ? '用户输入' : message.role === 'tool' ? `工具 ${message.tool_name ?? ''} 输出` : '模型消息'}</small><pre>{message.text || (message.tool_calls?.length ? '' : '（无文本内容）')}</pre>{message.tool_calls?.map((call, callIndex) => <div className="call-block" key={`${call.name}-${callIndex}`}><b>{call.name}</b><pre>{JSON.stringify(call.args, null, 2)}</pre></div>)}</article>) : <p className="muted">此节点没有可展示内容</p>}</section>;
+  return <section className="step-messages"><h3>{label}</h3>{messages.length ? messages.map((message, index) => <article key={`${message.role}-${index}`}><small>{message.role === 'user' ? '用户输入' : message.role === 'tool' ? `工具 ${toolLabel(message.tool_name)} 输出` : '模型消息'}</small><pre>{message.text || (message.tool_calls?.length ? '' : '（无文本内容）')}</pre>{message.tool_calls?.map((call, callIndex) => <div className="call-block" key={`${call.name}-${callIndex}`}><b>{toolLabel(call.name)}</b><pre>{JSON.stringify(call.args, null, 2)}</pre></div>)}</article>) : <p className="muted">此节点没有可展示内容</p>}</section>;
 }
 
 export default function App() {
@@ -179,7 +180,7 @@ export default function App() {
 
   async function decideProposal(proposal: Proposal, decision: 'approve' | 'reject') {
     const id = selected;
-    if (!id || busyRef.current || running || view?.session.archived) return;
+    if (!id || busyRef.current || running || savingSettings || view?.session.archived) return;
     const key = `${id}:${proposal.proposal_id}:${proposal.version}:${decision}`;
     if (!approvalRequests.current.has(key)) approvalRequests.current.set(key, crypto.randomUUID());
     busyRef.current = true; setApproving(proposal.proposal_id); setError('');
@@ -193,7 +194,7 @@ export default function App() {
   async function resume() {
     const id = selected;
     const checkpoint = view?.history.checkpoint_id;
-    if (!id || !checkpoint || busyRef.current || running) return;
+    if (!id || !checkpoint || busyRef.current || running || savingSettings) return;
     busyRef.current = true; setContinuing(true); setError('');
     try {
       await api<Run>(`/sessions/${id}/resume`, { method: 'POST', body: JSON.stringify(checkpointRequest('resume', id, checkpoint)) });
@@ -239,7 +240,7 @@ export default function App() {
   }
 
   async function send(text = draft, retry = false) {
-    if ((!text.trim() && !retry) || busyRef.current || running || view?.needs_recovery || view?.awaiting_approval || view?.session.archived) return;
+    if ((!text.trim() && !retry) || busyRef.current || running || savingSettings || view?.needs_recovery || view?.awaiting_approval || view?.session.archived) return;
     busyRef.current = true; setSending(true); setError(''); autoScroll.current = true;
     try {
       let id = selected;
@@ -294,6 +295,18 @@ export default function App() {
     setToolsDraft(config?.capabilities ?? []);
     setToolLimitsDraft(config?.tool_limits ?? {});
     setError(''); setSettingsError(''); setSettingsOpen(true);
+  }
+
+  async function selectTool(name: string, checked: boolean) {
+    if (!config || savingSettings) return;
+    setSavingSettings(true); setError('');
+    const tools = checked ? [...config.capabilities, name] : config.capabilities.filter(tool => tool !== name);
+    const previous = config;
+    setConfig({ ...config, capabilities: tools });
+    try {
+      setConfig(await api<Config>('/settings', { method: 'PUT', body: JSON.stringify({ workspace: config.workspace, tools, tool_limits: config.tool_limits }) }));
+    } catch (reason) { setConfig(previous); setError(errorText(reason)); }
+    finally { setSavingSettings(false); }
   }
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
@@ -385,14 +398,17 @@ export default function App() {
         {view?.run?.error && !running && <div className="notice">{view.run.error}</div>}
         {view?.session.archived ? <div className="notice">这个会话已归档。<button onClick={() => void editSession({ archived: false })}>恢复会话</button></div> : <div className={`composer ${running ? 'is-running' : ''}`}>
           <textarea ref={input} aria-label="输入消息" placeholder="给 Pi 一个任务，或问问这个项目…" value={draft} maxLength={32768} rows={2} disabled={!config || view?.needs_recovery || view?.awaiting_approval || sending || creating} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (!running) void send(); } }} />
-          <div className="composer-toolbar"><div className="model-chip"><span className="model-symbol">✳</span>{config?.model ?? '连接模型中'}<span className="model-mode">{config?.provider === 'fake' ? 'DEMO' : 'API'}</span></div><div className="send-area"><small>{running ? '刷新页面不会中断运行' : 'Enter 发送 · Shift + Enter 换行'}</small>{running ? <button className="stop-button" aria-label="停止运行" onClick={() => void stop()} disabled={cancelling}>{cancelling ? <Loader2 size={16} className="spin" /> : <Square size={13} fill="currentColor" />}</button> : <button className="send-button" aria-label="发送消息" disabled={!draft.trim() || sending || creating || !config || !!view?.needs_recovery || !!view?.awaiting_approval} onClick={() => void send()}>{sending ? <Loader2 size={18} className="spin" /> : <ArrowUp size={19} />}</button>}</div></div>
+          <div className="composer-toolbar"><div className="model-chip"><span className="model-symbol">✳</span>{config?.model ?? '连接模型中'}<span className="model-mode">{config?.provider === 'fake' ? 'DEMO' : 'API'}</span></div><div className="send-area"><small>{running ? '刷新页面不会中断运行' : 'Enter 发送 · Shift + Enter 换行'}</small>{running ? <button className="stop-button" aria-label="停止运行" onClick={() => void stop()} disabled={cancelling}>{cancelling ? <Loader2 size={16} className="spin" /> : <Square size={13} fill="currentColor" />}</button> : <button className="send-button" aria-label="发送消息" disabled={!draft.trim() || savingSettings || sending || creating || !config || !!view?.needs_recovery || !!view?.awaiting_approval} onClick={() => void send()}>{sending ? <Loader2 size={18} className="spin" /> : <ArrowUp size={19} />}</button>}</div></div>
         </div>}
       <div className="composer-footer"><span><Folder size={12} />{(view?.session.workspace ?? config?.workspace)?.split(/[\\/]/).pop() ?? '本地工作区'}</span><span>Pi 的回答可能有误，请核对重要信息。</span></div>
       </div>
     </main>
 
     {rightOpen && <aside className="details-panel"><div className="details-heading"><ActivityIcon size={16} /><b>运行详情</b><span>LIVE</span><button className="icon-button" aria-label="设置工作区和工具" onClick={openSettings}><Settings size={15} /></button></div>
-      <div className="detail-section"><div className="section-label">当前环境 <button className="text-button" onClick={openSettings}>修改</button></div><div className="environment-card"><div><span className="workspace-icon"><Code2 size={18} /></span><b>本地工作区</b><span className="readonly">{config?.approval_capabilities?.length ? '修改需审批' : '只读'}</span></div><p title={view?.session.workspace ?? config?.workspace}>{view?.session.workspace ?? config?.workspace ?? '等待服务连接'}</p></div><div className="tools-label">可用工具</div><div className="tool-chips">{(config?.capabilities ?? []).map(tool => <span key={tool}>{tool === 'read' ? <FileText size={12} /> : tool === 'list' ? <Folder size={12} /> : <Search size={12} />}{tool}</span>)}{(config?.approval_capabilities ?? []).map(tool => <span key={tool}><Check size={12} />{tool} · 审批</span>)}{!config?.capabilities.length && !config?.approval_capabilities?.length && <small>未启用工作区工具</small>}</div></div>
+      <div className="detail-section"><div className="section-label">当前环境 <button className="text-button" onClick={openSettings}>修改</button></div><div className="environment-card"><div><span className="workspace-icon"><Code2 size={18} /></span><b>本地工作区</b><span className="readonly">{config?.capabilities.some(name => ['write', 'edit', 'propose_command'].includes(name)) ? config.require_approval ? '需审批' : '直接执行' : '只读'}</span></div><p title={view?.session.workspace ?? config?.workspace}>{view?.session.workspace ?? config?.workspace ?? '等待服务连接'}</p></div><div className="tools-label">可用工具</div><div className="tool-chips">{(config?.available_tools ?? []).map(tool => <label key={tool}>
+        <input type="checkbox" aria-label={`启用 ${toolLabel(tool)}`} checked={config?.capabilities.includes(tool) ?? false} disabled={savingSettings}
+          onChange={event => void selectTool(tool, event.target.checked)} />{toolLabel(tool)}
+      </label>)}{!config?.available_tools.length && <small>未启用工作区工具</small>}</div><small className="muted">选择从下一轮对话生效。</small></div>
       <div className="detail-section activity-section"><div className="section-label"><span>执行过程</span>{running && <span className="pulse-label">运行中</span>}</div>
         {currentActivities.length ? <ol className="activity-list">{currentActivities.map((item, index) => { const inspectable = item.phase === 'after_model' || item.phase === 'after_tool'; return <li key={item.event_id} className={`${item.outcome === 'failed' ? 'failed' : ''} ${inspectable ? 'inspectable' : ''}`}><span className="timeline-dot">{running && index === currentActivities.length - 1 ? <Loader2 size={12} className="spin" /> : item.phase.includes('tool') ? <Terminal size={11} /> : <Check size={11} />}</span><div><button className="activity-node" disabled={!inspectable} onClick={() => void openStep(item.event_id)}>{phaseLabel(item)}{inspectable && <ArrowRight size={12} />}</button><time>{new Date(item.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</time></div></li>; })}</ol> : <div className="activity-empty"><div className="empty-route"><i /><span /><i /><span /><i /></div><b>每一步，都有迹可循</b><p>发送任务后，这里会显示<br />模型响应与工具执行过程。</p></div>}
       </div>
@@ -401,8 +417,10 @@ export default function App() {
 
     {branchOpen && <div className="modal-backdrop" onClick={() => { if (!branchLoading) setBranchOpen(false); }}><section className="modal" role="dialog" aria-modal="true" aria-label="创建会话分支" onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭分支对话框" disabled={branchLoading} onClick={() => setBranchOpen(false)}><X size={18} /></button><form onSubmit={event => void createBranch(event)}><h2>从检查点创建分支</h2><p>复制已完成的对话到独立会话，保留原会话和工作区。</p><label>已完成的检查点<select aria-label="已完成的检查点" value={checkpointId} onChange={event => setCheckpointId(event.target.value)} disabled={branchLoading}>{checkpoints.map(item => <option key={item.checkpoint_id} value={item.checkpoint_id}>{new Date(item.created_at).toLocaleString()} · {item.preview}</option>)}</select></label>{!branchLoading && !checkpoints.length && <p>还没有已完成的检查点。可以先继续当前运行，或新建会话。</p>}{branchError && <div className="error-banner" role="alert">{branchError}</div>}<button className="primary-button" disabled={branchLoading || !checkpointId} type="submit">{branchLoading ? '正在处理…' : '创建分支'}</button></form></section></div>}
 
-    {(renaming || showHelp || settingsOpen) && <div className="modal-backdrop" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><section className={`modal ${settingsOpen ? 'settings-modal' : ''}`} role="dialog" aria-modal="true" aria-label={renaming ? '重命名会话' : settingsOpen ? '工作区与工具设置' : '使用说明'} onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭对话框" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><X size={18} /></button>{renaming ? <form onSubmit={event => { event.preventDefault(); if (titleDraft.trim()) void editSession({ title: titleDraft.trim() }); }}><h2>重命名会话</h2><label>会话名称<input autoFocus value={titleDraft} maxLength={100} onChange={event => setTitleDraft(event.target.value)} /></label><button className="primary-button" type="submit" disabled={!titleDraft.trim()}>保存名称</button></form> : settingsOpen ? <form onSubmit={event => void saveSettings(event)}><div className="eyebrow">PI WORKSPACE CONFIG</div><h2>工作区与工具</h2><label>本机目录<input autoFocus value={workspaceDraft} onChange={event => setWorkspaceDraft(event.target.value)} placeholder="例如 C:\\workspace\\my-project" /></label><p className="form-note">填写本机已存在的目录。新会话使用新工作区；已有会话保留创建时的工作区。每个数值表示本轮用户请求中该工具最多执行次数；0 表示不允许调用。</p><fieldset><legend>只读工具与单轮调用上限</legend>{[['read', '读取文件'], ['list', '列出目录'], ['search', '搜索文本']].map(([name, label]) => <div className="tool-option" key={name}><label className="tool-enabled"><input type="checkbox" checked={toolsDraft.includes(name)} onChange={event => setToolsDraft(current => event.target.checked ? [...current, name] : current.filter(tool => tool !== name))} /><span><b>{name}</b><small>{label}</small></span></label><label className="limit-input">最多<input aria-label={`${name} 最大调用次数`} type="number" min="0" max="20" value={toolLimitsDraft[name] ?? 0} onChange={event => setToolLimitsDraft(current => ({ ...current, [name]: Math.max(0, Math.min(20, Number(event.target.value))) }))} />次</label></div>)}</fieldset>{settingsError && <div className="error-banner" role="alert">{settingsError}</div>}<button className="primary-button" type="submit" disabled={savingSettings || !workspaceDraft.trim()}>{savingSettings ? '正在保存…' : '保存设置'}</button></form> : <><div className="brand-mark">π</div><h2>你的本地 AI 工作空间。</h2><p>你可以聊天、写作、分析、规划，也可以让 Pi 按需查看当前工作区。</p><p>执行过程会在右侧呈现。工作区和只读工具可以在设置中更换。</p><p>会话保存在本机。使用真实模型时，服务密钥只在本机服务端配置。</p><button className="primary-button" onClick={() => setShowHelp(false)}>开始使用 <ArrowRight size={15} /></button></>}</section></div>}
+    {(renaming || showHelp || settingsOpen) && <div className="modal-backdrop" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><section className={`modal ${settingsOpen ? 'settings-modal' : ''}`} role="dialog" aria-modal="true" aria-label={renaming ? '重命名会话' : settingsOpen ? '工作区与工具设置' : '使用说明'} onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭对话框" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><X size={18} /></button>{renaming ? <form onSubmit={event => { event.preventDefault(); if (titleDraft.trim()) void editSession({ title: titleDraft.trim() }); }}><h2>重命名会话</h2><label>会话名称<input autoFocus value={titleDraft} maxLength={100} onChange={event => setTitleDraft(event.target.value)} /></label><button className="primary-button" type="submit" disabled={!titleDraft.trim()}>保存名称</button></form> : settingsOpen ? <form onSubmit={event => void saveSettings(event)}><div className="eyebrow">PI WORKSPACE CONFIG</div><h2>工作区与工具</h2><label>本机目录<input autoFocus value={workspaceDraft} onChange={event => setWorkspaceDraft(event.target.value)} placeholder="例如 C:\\workspace\\my-project" /></label><p className="form-note">填写本机已存在的目录。新会话使用新工作区；已有会话保留创建时的工作区。工具选择从下一轮对话生效，取消勾选后模型不能调用该工具。只读工具的数值是每轮调用上限，0 表示不允许调用。</p><ToolSettings available={config?.available_tools ?? []} selected={toolsDraft} limits={toolLimitsDraft}
+      toggle={(name, checked) => setToolsDraft(current => checked ? [...current, name] : current.filter(tool => tool !== name))}
+      setLimit={(name, limit) => setToolLimitsDraft(current => ({ ...current, [name]: limit }))} />{settingsError && <div className="error-banner" role="alert">{settingsError}</div>}<button className="primary-button" type="submit" disabled={savingSettings || !workspaceDraft.trim()}>{savingSettings ? '正在保存…' : '保存设置'}</button></form> : <><div className="brand-mark">π</div><h2>你的本地 AI 工作空间。</h2><p>你可以聊天、写作、分析、规划，也可以让 Pi 按需查看当前工作区。</p><p>执行过程会在右侧呈现。工作区与工具可以在设置中更换，工具选择从下一轮生效。</p><p>会话保存在本机。使用真实模型时，服务密钥只在本机服务端配置。</p><button className="primary-button" onClick={() => setShowHelp(false)}>开始使用 <ArrowRight size={15} /></button></>}</section></div>}
 
-    {(stepLoading || stepError || stepDetail) && <div className="modal-backdrop" onClick={() => { setStepDetail(null); setStepError(''); }}><section className="modal step-modal" role="dialog" aria-modal="true" aria-label="执行节点详情" onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭节点详情" onClick={() => { setStepDetail(null); setStepError(''); }}><X size={18} /></button>{stepLoading ? <div className="loading-state"><Loader2 size={18} className="spin" />读取 checkpoint 展示快照…</div> : stepError ? <><h2>节点详情暂不可用</h2><p>{stepError}</p></> : stepDetail && <><div className="eyebrow">RUN NODE / {stepDetail.node.toUpperCase()}</div><h2>{stepDetail.title}</h2><div className="step-grid"><StepMessages label="输入" messages={stepDetail.input} /><StepMessages label="输出" messages={stepDetail.output} /></div><div className="snapshot-grid"><details><summary>执行前快照</summary><pre>{JSON.stringify(stepDetail.snapshot_before, null, 2)}</pre></details><details><summary>执行后快照</summary><pre>{JSON.stringify(stepDetail.snapshot_after, null, 2)}</pre></details></div></>}</section></div>}
+    {(stepLoading || stepError || stepDetail) && <div className="modal-backdrop" onClick={() => { setStepDetail(null); setStepError(''); }}><section className="modal step-modal" role="dialog" aria-modal="true" aria-label="执行节点详情" onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭节点详情" onClick={() => { setStepDetail(null); setStepError(''); }}><X size={18} /></button>{stepLoading ? <div className="loading-state"><Loader2 size={18} className="spin" />读取 checkpoint 展示快照…</div> : stepError ? <><h2>节点详情暂不可用</h2><p>{stepError}</p></> : stepDetail && <><div className="eyebrow">RUN NODE / {stepDetail.node.toUpperCase()}</div><h2>{stepDetail.title.replace('propose_command', 'command')}</h2><div className="step-grid"><StepMessages label="输入" messages={stepDetail.input} /><StepMessages label="输出" messages={stepDetail.output} /></div><div className="snapshot-grid"><details><summary>执行前快照</summary><pre>{JSON.stringify(stepDetail.snapshot_before, null, 2)}</pre></details><details><summary>执行后快照</summary><pre>{JSON.stringify(stepDetail.snapshot_after, null, 2)}</pre></details></div></>}</section></div>}
   </div>;
 }

@@ -55,7 +55,7 @@ flowchart LR
     F -.-> I
 ```
 
-默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供只读工具、节点级进度、流式文本、显式中断恢复和 checkpoint 分支。文件 `write/edit` 与命令提案须由服务端启动参数显式启用，并经 Web 人工审批后执行；命令仅允许已配置的可执行文件。工作区路径限制不等于操作系统沙箱。
+默认 fake CLI 只运行最小图；Web fake 模式额外提供真实文件读取演示。当前 Web 为本机单用户服务，提供节点级进度、流式文本、显式中断恢复和 checkpoint 分支。`read/list/search/write/edit/command` 默认全部选中，页面可逐项取消，从下一轮对话生效。文件和命令默认需人工审批，可通过 `--no-require-approval` 改为直接执行；命令默认允许系统 shell，自定义 `--allow-executable` 会替换该列表。工作区路径限制不等于操作系统沙箱。
 
 <a id="quickstart"></a>
 
@@ -179,12 +179,17 @@ macOS / Linux：
 ./scripts/start-web.sh stop
 ./scripts/start-web.sh restart --provider compatible --workspace ./safe-workspace
 
-# 文件修改与命令能力由启动配置显式启用，每份提案仍需要在页面批准。
-./scripts/start-web.sh --provider compatible --workspace ./safe-workspace \
-  --enable-file-mutations --allow-executable /usr/bin/git
+# 默认开启全部工具，write/edit/command 默认需要页面审批。
+./scripts/start-web.sh --provider compatible --workspace ./safe-workspace
+
+# 可选：不等待人工审批，直接执行当前勾选的工具。
+./scripts/start-web.sh --provider compatible --no-require-approval
+
+# 可选：以 git 替换默认系统 shell 的可执行程序允许列表。
+./scripts/start-web.sh --provider compatible --allow-executable /usr/bin/git
 ```
 
-Windows 对应参数为 `-Action status|stop|restart`、`-EnableFileMutations`、`-AllowExecutable`。
+Windows 对应参数为 `-Action status|stop|restart`、`-RequireApproval $false`、`-AllowExecutable`。macOS/Linux 默认 shell 为 `/bin/sh`，Windows 为系统 `cmd.exe`。保留 `--enable-file-mutations` / `-EnableFileMutations` 兼容旧命令；服务端禁用可使用 `--no-enable-file-mutations` / `-EnableFileMutations:$false` 和 `--disable-command` / `-DisableCommand`。
 管理自定义数据库时重复指定 `--database` / `-Database`；重启时提供所需启动参数。
 `status` / `stop` 复用已安装的 Python 环境，不构建前端。旧版服务没有实例记录时，请在原终端 `fg` 后 `Ctrl+C` 退出，再用新入口启动；`Ctrl+Z` 会暂停进程并继续占锁。审批和故障恢复的完整边界见 [Web UI](docs/web-ui.md)。
 
@@ -376,7 +381,7 @@ PI_AGENT_API_KEY=replace-with-your-api-key
 <details>
 <summary>能自动修改文件、执行命令或部署到公网吗？</summary>
 
-当前 Web 默认提供只读工具；文件修改和命令提案由服务端显式启用，人工审批后才执行。CLI 的命令执行需要允许列表、持久化提案与人工批准。结果不确定的操作不自动重放。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；相关验证边界见 [Web 归档](docs/acceptance/web-archive-2026-10-01.md)。
+当前 Web 默认开启文件修改和命令工具，默认人工审批；启动时可用 `--no-require-approval` 关闭审批。所有工具可取消勾选，从下一轮生效。CLI 的命令执行仍需要允许列表、持久化提案与人工批准。结果不确定的操作不自动重放。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；当前参数与验证见 [工具设置调整记录](docs/acceptance/web-tool-settings-2026-10-01.md)。
 
 </details>
 

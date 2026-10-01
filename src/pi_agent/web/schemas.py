@@ -5,10 +5,14 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 TOOL_NAMES = ("read", "list", "search")
+CODING_TOOL_NAMES = ("write", "edit", "propose_command")
+ALL_TOOL_NAMES = TOOL_NAMES + CODING_TOOL_NAMES
 DEFAULT_TOOL_CALL_LIMITS = {name: 4 for name in TOOL_NAMES}
 MAX_TOOL_CALLS_PER_TOOL = 20
-ToolName = Literal["read", "list", "search"]
-ToolCallLimits = dict[ToolName, Annotated[int, Field(ge=0, le=MAX_TOOL_CALLS_PER_TOOL)]]
+ToolName = Literal["read", "list", "search", "write", "edit", "propose_command"]
+ToolCallLimits = dict[
+    Literal["read", "list", "search"], Annotated[int, Field(ge=0, le=MAX_TOOL_CALLS_PER_TOOL)]
+]
 
 
 class InputModel(BaseModel):
@@ -44,7 +48,7 @@ class SessionEdit(InputModel):
 
 class SettingsUpdate(InputModel):
     workspace: str = Field(min_length=1, max_length=4096)
-    tools: list[ToolName] = Field(max_length=3)
+    tools: list[ToolName] = Field(max_length=6)
     tool_limits: ToolCallLimits
 
 

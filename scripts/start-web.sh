@@ -14,8 +14,12 @@ Options:
   --database PATH            Database outside the workspace (default: ~/.pi-agent/web.sqlite)
   --port NUMBER              Local HTTP port (default: 8766)
   --force                    Force stop/restart after graceful shutdown timeout
-  --enable-file-mutations    Enable human-approved file write/edit proposals
-  --allow-executable PATH    Allow human-approved command proposals (repeatable)
+  --enable-file-mutations    Enable file write/edit (default: enabled)
+  --no-enable-file-mutations Disable file write/edit on this server
+  --require-approval        Require write/edit/command approval (default: enabled)
+  --no-require-approval     Execute selected tools without human approval
+  --allow-executable PATH   Replace default shell allowlist (repeatable)
+  --disable-command         Disable command on this server
   -h, --help                 Show this help
 
 Relative paths are resolved from the project root.
@@ -49,7 +53,8 @@ while (( $# > 0 )); do
             exit 0
             ;;
         --force) force=true; shift ;;
-        --enable-file-mutations) coding_arguments+=(--enable-file-mutations); shift ;;
+        --enable-file-mutations|--no-enable-file-mutations|--require-approval|--no-require-approval|--disable-command)
+            coding_arguments+=("$1"); shift ;;
         --allow-executable)
             (( $# >= 2 )) || fail "Missing value for $1."
             [[ -n "$2" && "$2" != --* ]] || fail "Missing value for $1."

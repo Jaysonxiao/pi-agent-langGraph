@@ -24,6 +24,8 @@ from pi_agent.sessions import open_async_sqlite_checkpointer
 from pi_agent.sessions.config import checkpoint_config, session_config
 from pi_agent.tools.approval_store import ApprovalStore
 from pi_agent.web.schemas import (
+    ALL_TOOL_NAMES,
+    CODING_TOOL_NAMES,
     DEFAULT_TOOL_CALL_LIMITS,
     MAX_TOOL_CALLS_PER_TOOL,
     ApprovalAction,
@@ -42,6 +44,7 @@ from pi_agent.web.schemas import (
     StreamingPreview,
 )
 from pi_agent.web.store import WebStore
+from pi_agent.web.tool_policy import default_executables
 
 
 class WebError(Exception):
@@ -60,8 +63,9 @@ class Workbench:
         timeout: float = 120,
         request_timeout: float = 30,
         attempts: int = 3,
-        file_mutations: bool = False,
-        allowed_executables: frozenset[str] = frozenset(),
+        file_mutations: bool = True,
+        allowed_executables: frozenset[str] | None = None,
+        require_approval: bool = True,
     ) -> None:
         self.database = database
         self.default_workspace = workspace.resolve()
@@ -72,7 +76,10 @@ class Workbench:
         self.request_timeout = request_timeout
         self.attempts = attempts
         self.file_mutations = file_mutations
-        self.allowed_executables = allowed_executables
+        self.allowed_executables = (
+            default_executables() if allowed_executables is None else allowed_executables
+        )
+        self.require_approval = require_approval
         self.approvals = ApprovalStore(database)
         self.approvals.initialize()
         self.epoch = uuid4().hex
@@ -82,7 +89,7 @@ class Workbench:
         saved_settings = self.store.settings()
         if saved_settings is None:
             self.workspace = self.default_workspace
-            self.enabled_tools = ("read", "list", "search")
+            self.enabled_tools = ALL_TOOL_NAMES
             self.tool_call_limits = DEFAULT_TOOL_CALL_LIMITS.copy()
             self.store.save_settings(str(self.workspace), self.enabled_tools, self.tool_call_limits)
         else:
@@ -95,7 +102,7 @@ class Workbench:
             if (
                 candidate.is_dir()
                 and not self.database.resolve().is_relative_to(candidate)
-                and set(saved_tools).issubset(set(DEFAULT_TOOL_CALL_LIMITS))
+                and set(saved_tools).issubset(set(ALL_TOOL_NAMES))
                 and valid_limits
             ):
                 self.workspace = candidate
@@ -103,7 +110,7 @@ class Workbench:
                 self.tool_call_limits = saved_tool_limits
             else:
                 self.workspace = self.default_workspace
-                self.enabled_tools = ("read", "list", "search")
+                self.enabled_tools = ALL_TOOL_NAMES
                 self.tool_call_limits = DEFAULT_TOOL_CALL_LIMITS.copy()
         self.coordinator = SessionCoordinator()
         self.tasks: dict[str, asyncio.Task[None]] = {}
@@ -116,27 +123,44 @@ class Workbench:
         if self.store.session(session_id) is None:
             raise WebError(404, "找不到这个会话。")
 
+    @property
+    def available_tools(self) -> tuple[str, ...]:
+        return (
+            ("read", "list", "search")
+            + (("write", "edit") if self.file_mutations else ())
+            + (("propose_command",) if self.allowed_executables else ())
+        )
+
+    @property
+    def selected_tools(self) -> tuple[str, ...]:
+        return tuple(name for name in self.enabled_tools if name in self.available_tools)
+
     def public_config(self, provider: str, model_name: str) -> dict[str, object]:
         return {
             "workspace": str(self.workspace),
             "provider": provider,
             "model": model_name,
             "server_epoch": self.epoch,
-            "capabilities": list(self.enabled_tools),
+            "capabilities": list(self.selected_tools),
+            "available_tools": list(self.available_tools),
             "tool_limits": self.tool_call_limits.copy(),
-            "approval_capabilities": (["write", "edit"] if self.file_mutations else [])
-            + (["propose_command"] if self.allowed_executables else []),
+            "approval_capabilities": [
+                name
+                for name in self.selected_tools
+                if name in CODING_TOOL_NAMES and self.require_approval
+            ],
+            "require_approval": self.require_approval,
             "allowed_executables": sorted(self.allowed_executables),
         }
 
     async def update_settings(self, settings: SettingsUpdate) -> dict[str, object]:
         async with self.lock:
-            if any(not task.done() for task in self.tasks.values()):
-                raise WebError(409, "请等待当前运行结束后再修改工作区或工具。")
             if len(settings.tools) != len(set(settings.tools)):
                 raise WebError(422, "工具不能重复选择。")
             if set(settings.tool_limits) != set(DEFAULT_TOOL_CALL_LIMITS):
                 raise WebError(422, "请为 read、list、search 分别设置调用上限。")
+            if not set(settings.tools).issubset(self.available_tools):
+                raise WebError(422, "不能启用服务端未开放的工具。")
             try:
                 workspace = Path(settings.workspace).expanduser().resolve(strict=True)
             except (OSError, RuntimeError, ValueError):
@@ -145,6 +169,8 @@ class Workbench:
                 raise WebError(422, "工作区必须是已存在的本机目录。")
             if self.database.resolve().is_relative_to(workspace):
                 raise WebError(422, "工作区不能包含 Web 会话数据库。")
+            if workspace != self.workspace and any(not task.done() for task in self.tasks.values()):
+                raise WebError(409, "请等待当前运行结束后再修改工作区; 工具选择可提前保存。")
             self.workspace = workspace
             self.enabled_tools = tuple(settings.tools)
             self.tool_call_limits = {
@@ -169,7 +195,10 @@ class Workbench:
         assert item is not None
         run = self.store.latest_run(session_id)
         proposals = self.approvals.proposals(session_id)
-        awaiting = any(item.status == "pending" for item in proposals)
+        awaiting = any(
+            item.status == "pending" and item.payload.get("requires_approval", True)
+            for item in proposals
+        )
         return SessionView(
             session=item,
             server_epoch=self.epoch,
@@ -214,7 +243,9 @@ class Workbench:
             ):
                 raise WebError(409, "提案已不属于当前检查点, 请刷新会话。")
             if action.decision == "approve" and (
-                (proposal.kind == "file" and not self.file_mutations)
+                ("propose_command" if proposal.kind == "command" else proposal.payload["operation"])
+                not in self.selected_tools
+                or (proposal.kind == "file" and not self.file_mutations)
                 or (
                     proposal.kind == "command"
                     and proposal.payload["args"]["executable"] not in self.allowed_executables
@@ -408,7 +439,10 @@ class Workbench:
                 raise WebError(409, "会话正在运行或服务繁忙, 请稍后重试。")
             self.require_idle_session(session_id)
             state = await self.state(session_id)
-            if any(p.status == "pending" for p in self.approvals.proposals(session_id)):
+            if any(
+                p.status == "pending" and p.payload.get("requires_approval", True)
+                for p in self.approvals.proposals(session_id)
+            ):
                 raise WebError(409, "请先批准或拒绝待审批提案。")
             if isinstance(request, CheckpointAction):
                 current = project_history(state).checkpoint_id
@@ -432,7 +466,14 @@ class Workbench:
                 await self.coordinator.cancel_run(session_id, run_id)
                 raise
             task = asyncio.create_task(
-                self._execute(lease, text, session_workspace, self.enabled_tools, resume=resume)
+                self._execute(
+                    lease,
+                    text,
+                    session_workspace,
+                    self.selected_tools,
+                    self.tool_call_limits.copy(),
+                    resume=resume,
+                )
             )
             self.tasks[run_id] = task
             task.add_done_callback(lambda _task: self.tasks.pop(run_id, None))
@@ -444,6 +485,7 @@ class Workbench:
         text: str,
         workspace: Path,
         enabled_tools: tuple[str, ...],
+        tool_call_limits: dict[str, int],
         *,
         resume: bool = False,
     ) -> None:
@@ -471,17 +513,24 @@ class Workbench:
             database=self.database,
             workspace=workspace,
             session_id=lease.session_id,
-            enabled_tools=enabled_tools,
-            tool_call_limits=self.tool_call_limits.copy(),
+            enabled_tools=tuple(name for name in enabled_tools if name in DEFAULT_TOOL_CALL_LIMITS),
+            tool_call_limits=tool_call_limits,
             instruction_filename=PI_INSTRUCTION_FILENAME,
             prompt_template=workbench_prompt(
-                file_mutations=self.file_mutations, command_approval=bool(self.allowed_executables)
+                file_mutations=bool({"write", "edit"}.intersection(enabled_tools)),
+                command_approval="propose_command" in enabled_tools,
+                require_approval=self.require_approval,
             )
             + "\n\n{instructions}",
             hooks=hooks,
             text_observer=preview,
             coding_executor=CodingExecutor(
-                self.approvals, workspace, self.file_mutations, self.allowed_executables
+                self.approvals,
+                workspace,
+                self.file_mutations,
+                self.allowed_executables,
+                enabled_tools=frozenset(enabled_tools),
+                require_approval=self.require_approval,
             ),
             run_id=lease.run_id,
             cancellation_token=lease.cancellation_token,

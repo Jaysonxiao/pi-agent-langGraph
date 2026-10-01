@@ -2,6 +2,8 @@
 
 ## 1. 当前状态与文档分工
 
+- 2026-10-01 归档后调整：用户反馈本机 Web 基本可用，并授权默认开启全部工具、增加审批启动参数、简化 write/edit/command 展示和全部工具勾选。已实现下一轮设置快照、选择持久化及旧设置迁移，默认仍需审批；关闭审批的新操作仍使用持久提案与认领，旧待审批操作不自动批准。独立验证见 [工具设置调整记录](docs/acceptance/web-tool-settings-2026-10-01.md)，不回填下方归档基线或新增里程碑；仍不 push。
+
 - 2026-10-01 归档：用户授权归档 Web 工作台及两轮扩展的已交付范围，并合并到本地 `main`，暂不 push。启动/恢复/分支/流式、服务管理、持久审批、文件修改和命令执行已交付；本机严格回归 626 passed/6 skipped、真实 Web gate 2 passed。见 [Web 归档](docs/acceptance/web-archive-2026-10-01.md)与[原始验收记录](docs/acceptance/web-coding-2026-10-01.md)。Linux/Windows 独立 CI、Windows 特定进程树回收、用户手工功能核对及部署验证保留在 [后续清单](docs/follow-ups/web.md)，不关闭 M11 D1–D3。
 
 - 2026-10-01 实现与复验：用户选择任务 1、2、4、5，先优化计划后授权开发；服务管理与 Coding Tools、本机组合及 live 验证完成。此前为触发平台 CI 的开发分支推送被自动审批审查拒绝，没有远端运行结果；本次遵循用户“不 push”的指令，仅本地归档合并。范围见 [开发计划](docs/design/web-coding-plan.md)，未执行的平台标准仍保留。

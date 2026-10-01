@@ -35,20 +35,27 @@ def _unreachable(_args: Any) -> str:
     raise ValueError("This tool must use the durable approval executor.")
 
 
-def coding_definitions(files: bool, executables: frozenset[str]) -> tuple[ExecutableTool, ...]:
+def coding_definitions(
+    files: bool,
+    executables: frozenset[str],
+    *,
+    enabled_tools: frozenset[str] | None = None,
+    require_approval: bool = True,
+) -> tuple[ExecutableTool, ...]:
+    mode = "human approval" if require_approval else "automatic execution under server policy"
     definitions: list[ExecutableTool] = []
     if files:
         definitions.extend(
             [
                 ToolDefinition(
                     "write",
-                    "Propose a UTF-8 file creation/replacement for human approval.",
+                    f"Prepare a UTF-8 file creation/replacement for {mode}.",
                     WriteArguments,
                     _unreachable,
                 ),
                 ToolDefinition(
                     "edit",
-                    "Propose a unique exact text replacement for human approval.",
+                    f"Prepare a unique exact text replacement for {mode}.",
                     EditArguments,
                     _unreachable,
                 ),
@@ -58,13 +65,15 @@ def coding_definitions(files: bool, executables: frozenset[str]) -> tuple[Execut
         definitions.append(
             ToolDefinition(
                 "propose_command",
-                "Propose exact executable/argv for human approval. Allowed executables: "
+                f"Prepare exact executable/argv for {mode}. Allowed executables: "
                 + json.dumps(sorted(executables)),
                 ProcessArguments,
                 _unreachable,
             )
         )
-    return tuple(definitions)
+    return tuple(
+        tool for tool in definitions if enabled_tools is None or tool.name in enabled_tools
+    )
 
 
 def proposal_projection(proposal: DurableProposal) -> dict[str, Any]:
@@ -83,6 +92,7 @@ def proposal_projection(proposal: DurableProposal) -> dict[str, Any]:
         "after_text": payload.get("after_text"),
         "args": payload.get("args"),
         "result": proposal.result,
+        "requires_approval": payload.get("requires_approval", True),
     }
 
 
@@ -92,10 +102,21 @@ class CodingExecutor:
     workspace: Path
     files: bool
     executables: frozenset[str]
+    enabled_tools: frozenset[str] | None = None
+    require_approval: bool = True
 
     @property
     def names(self) -> frozenset[str]:
-        return frozenset(tool.name for tool in coding_definitions(self.files, self.executables))
+        return frozenset(tool.name for tool in self.definitions)
+
+    @property
+    def definitions(self) -> tuple[ExecutableTool, ...]:
+        return coding_definitions(
+            self.files,
+            self.executables,
+            enabled_tools=self.enabled_tools,
+            require_approval=self.require_approval,
+        )
 
     def prepare(self, call: ToolCall, session: str, message: str) -> DurableProposal:
         if call["name"] not in self.names:
@@ -146,6 +167,7 @@ class CodingExecutor:
                 "diff": diff,
                 "change": to_pending_file_change(prepared, preview=diff),
             }
+        payload["requires_approval"] = self.require_approval
         return self.store.prepare(
             session=session,
             workspace=str(paths.root),
@@ -170,11 +192,23 @@ class CodingExecutor:
                 proposal = self.prepare(call, session, message)
             # Keep interrupt positions stable when this multi-call node restarts.
             # Earlier completed calls consume their old answer and replay only the stored result.
-            answer = interrupt({"proposal_id": proposal.proposal_id, "version": proposal.version})
+            # Persist the policy per operation. Restarting in automatic mode must not
+            # consume a proposal that was originally waiting for human approval.
+            if proposal.payload.get("requires_approval", True):
+                answer = interrupt(
+                    {"proposal_id": proposal.proposal_id, "version": proposal.version}
+                )
+            else:
+                answer = identity
+                if proposal.status == "pending":
+                    token.raise_if_cancelled()
+                    if call["name"] not in self.names:
+                        raise ValueError("Capability is no longer enabled.")
+                    self.store.decide(identity, proposal.version, "approve")
             proposal = self.store.proposal(identity)
             assert proposal is not None
             if answer != identity or proposal.status == "pending":
-                raise ValueError("A persisted human decision is required.")
+                raise ValueError("A persisted decision is required.")
             if proposal.status == "approved":
                 token.raise_if_cancelled()
                 if (

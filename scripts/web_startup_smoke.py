@@ -93,6 +93,16 @@ def main() -> None:
                             ) from None
                         time.sleep(0.1)
                 assert config["provider"] == "fake"
+                assert config["capabilities"] == [
+                    "read",
+                    "list",
+                    "search",
+                    "write",
+                    "edit",
+                    "propose_command",
+                ]
+                assert config["require_approval"] is True
+                assert config["allowed_executables"]
                 created = request("/api/sessions", {})
                 sid = str(created["session_id"])
                 run = request(

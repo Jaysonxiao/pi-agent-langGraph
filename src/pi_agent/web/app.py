@@ -59,8 +59,9 @@ def create_app(
     attempts: int = 3,
     service_instance: dict[str, object] | None = None,
     shutdown: Callable[[], None] | None = None,
-    file_mutations: bool = False,
-    allowed_executables: frozenset[str] = frozenset(),
+    file_mutations: bool = True,
+    allowed_executables: frozenset[str] | None = None,
+    require_approval: bool = True,
 ) -> FastAPI:
     workspace = workspace.resolve()
     database = database.expanduser().resolve()
@@ -81,6 +82,7 @@ def create_app(
         attempts=attempts,
         file_mutations=file_mutations,
         allowed_executables=allowed_executables,
+        require_approval=require_approval,
     )
 
     @asynccontextmanager
@@ -337,8 +339,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--database", type=Path, default=default_web_database())
     parser.add_argument("--provider", choices=["fake", "compatible"])
     parser.add_argument("--port", type=int, default=8766)
-    parser.add_argument("--enable-file-mutations", action="store_true")
-    parser.add_argument("--allow-executable", action="append", default=[])
+    parser.add_argument(
+        "--enable-file-mutations", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument(
+        "--require-approval",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Require human decisions for write/edit/command (default: enabled)",
+    )
+    parser.add_argument(
+        "--allow-executable",
+        action="append",
+        default=None,
+        help="Replace default system shell allowlist; repeat for multiple programs",
+    )
+    parser.add_argument("--disable-command", action="store_true")
     parser.add_argument(
         "--force", action="store_true", help="Force a verified service to stop after timeout"
     )
@@ -398,7 +414,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             service_instance=instance,
             shutdown=shutdown,
             file_mutations=args.enable_file_mutations,
-            allowed_executables=frozenset(args.allow_executable),
+            allowed_executables=frozenset()
+            if args.disable_command
+            else (frozenset(args.allow_executable) if args.allow_executable is not None else None),
+            require_approval=args.require_approval,
         )
         print(f"Pi Workbench: http://127.0.0.1:{args.port}")
         server = uvicorn.Server(

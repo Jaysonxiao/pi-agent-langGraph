@@ -17,7 +17,7 @@ from pi_agent.models.async_adapter import CompatibleAsyncChatModel
 from pi_agent.models.async_base import AsyncChatModel
 from pi_agent.models.streaming import TextObserver
 from pi_agent.runtime.cancellation import AsyncCancellationToken
-from pi_agent.runtime.coding import CodingExecutor, coding_definitions
+from pi_agent.runtime.coding import CodingExecutor
 from pi_agent.runtime.policy import RetryPolicy
 from pi_agent.runtime.read_only import create_async_read_only_registry
 from pi_agent.security import WorkspacePathPolicy
@@ -60,7 +60,7 @@ async def run_session(
     )
     executor = config.coding_executor
     if executor is not None:
-        definitions += coding_definitions(executor.files, executor.executables)
+        definitions += executor.definitions
     binder = getattr(model, "bind_tools", None)
     if callable(binder) and (
         not isinstance(model, CompatibleAsyncChatModel) or model.supports_tool_binding

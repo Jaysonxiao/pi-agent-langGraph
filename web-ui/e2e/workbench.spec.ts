@@ -2,6 +2,40 @@ import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 
+test('all tools are selected by default and deselection survives reload and blocks next turn', async ({ page }) => {
+  await page.goto('/');
+  const tools = ['read', 'list', 'search', 'write', 'edit', 'command'];
+  for (const name of tools) {
+    await expect(page.getByRole('checkbox', { name: `启用 ${name}`, exact: true })).toBeChecked();
+  }
+  await expect(page.locator('.tool-chips')).not.toContainText('审批');
+  await expect(page.locator('.tool-chips')).not.toContainText('propose_command');
+  await page.screenshot({ path: resolve('../.pi-agent/qa/tool-selection.png'), fullPage: true });
+  for (const name of tools) {
+    await page.getByRole('checkbox', { name: `启用 ${name}`, exact: true }).uncheck();
+  }
+  await expect(page.getByRole('checkbox', { name: '启用 command', exact: true })).toBeEnabled();
+  await page.reload();
+  for (const name of tools) {
+    await expect(page.getByRole('checkbox', { name: `启用 ${name}`, exact: true })).not.toBeChecked();
+  }
+  const path = `disabled-${Date.now()}.txt`;
+  await page.getByRole('textbox', { name: '输入消息' }).fill(`写入 ${JSON.stringify({ path, content: 'must not write' })}`);
+  await page.getByRole('button', { name: '发送消息' }).click();
+  await expect(page.locator('.run-summary')).toContainText('已完成', { timeout: 15000 });
+  expect(existsSync(resolve('../.pi-agent/web-e2e-workspace', path))).toBe(false);
+  await expect(page.getByRole('button', { name: '批准并继续' })).toHaveCount(0);
+  for (const name of tools) {
+    await page.getByRole('checkbox', { name: `启用 ${name}`, exact: true }).check();
+  }
+  await expect(page.getByRole('checkbox', { name: '启用 command', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '工作区与工具' }).click();
+  const dialog = page.getByRole('dialog', { name: '工作区与工具设置' });
+  await expect(dialog.getByRole('checkbox')).toHaveCount(6);
+  await expect(dialog.getByRole('checkbox', { name: /command/ })).toBeChecked();
+  await page.getByRole('button', { name: '关闭对话框' }).click();
+});
+
 test('file approval survives reload, writes only after approve and rejection preserves content', async ({ page }) => {
   await page.goto('/');
   const path = `approval-${Date.now()}.txt`;
@@ -85,7 +119,7 @@ test('real browser: send, refresh, persist, rename, archive and restore', async 
   await page.getByRole('checkbox', { name: /搜索文本/ }).uncheck();
   await page.getByRole('button', { name: '保存设置' }).click();
   await expect(page.locator('.tool-chips')).toContainText('read');
-  await expect(page.locator('.tool-chips')).not.toContainText('search');
+  await expect(page.getByRole('checkbox', { name: '启用 search', exact: true })).not.toBeChecked();
   await page.reload();
   await page.getByRole('button', { name: '工作区与工具' }).click();
   await expect(page.getByRole('spinbutton', { name: 'read 最大调用次数' })).toHaveValue('7');

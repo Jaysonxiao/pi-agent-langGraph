@@ -51,7 +51,8 @@ class WebStore:
                 CREATE TABLE IF NOT EXISTS web_settings (
                     settings_id INTEGER PRIMARY KEY CHECK(settings_id=1),
                     workspace TEXT NOT NULL, tools_json TEXT NOT NULL,
-                    tool_limits_json TEXT NOT NULL DEFAULT '{}');
+                    tool_limits_json TEXT NOT NULL DEFAULT '{}',
+                    tools_version INTEGER NOT NULL DEFAULT 2);
                 CREATE TABLE IF NOT EXISTS web_branches (
                     source_session_id TEXT NOT NULL, request_id TEXT NOT NULL,
                     checkpoint_id TEXT NOT NULL, target_session_id TEXT NOT NULL,
@@ -67,6 +68,25 @@ class WebStore:
                 db.execute(
                     "ALTER TABLE web_settings ADD COLUMN tool_limits_json "
                     "TEXT NOT NULL DEFAULT '{}'"
+                )
+            if "tools_version" not in settings_columns:
+                db.execute(
+                    "ALTER TABLE web_settings ADD COLUMN tools_version INTEGER NOT NULL DEFAULT 1"
+                )
+            # Old settings had no coding-tool selections. Add their defaults once;
+            # subsequent saved deselections (version 2) must survive every restart.
+            row = db.execute(
+                "SELECT tools_json FROM web_settings WHERE settings_id=1 AND tools_version=1"
+            ).fetchone()
+            if row is not None:
+                tools = list(
+                    dict.fromkeys(
+                        [*json.loads(row["tools_json"]), "write", "edit", "propose_command"]
+                    )
+                )
+                db.execute(
+                    "UPDATE web_settings SET tools_json=?,tools_version=2 WHERE settings_id=1",
+                    (json.dumps(tools),),
                 )
             run_columns = {row["name"] for row in db.execute("PRAGMA table_info(web_runs)")}
             if "operation" not in run_columns:
@@ -111,10 +131,12 @@ class WebStore:
     ) -> None:
         with self.connect() as db:
             db.execute(
-                "INSERT INTO web_settings(settings_id,workspace,tools_json,tool_limits_json) "
-                "VALUES (1,?,?,?) "
+                "INSERT INTO web_settings(settings_id,workspace,tools_json,tool_limits_json,"
+                "tools_version) "
+                "VALUES (1,?,?,?,2) "
                 "ON CONFLICT(settings_id) DO UPDATE SET workspace=excluded.workspace, "
-                "tools_json=excluded.tools_json, tool_limits_json=excluded.tool_limits_json",
+                "tools_json=excluded.tools_json, tool_limits_json=excluded.tool_limits_json, "
+                "tools_version=2",
                 (workspace, json.dumps(tools), json.dumps(tool_limits)),
             )
 

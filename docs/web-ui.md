@@ -2,6 +2,8 @@
 
 2026-10-01 归档：用户授权归档本机工作台及两轮扩展的已交付范围，并合并本地 `main`，暂不 push。当前结论见 [Web 归档](acceptance/web-archive-2026-10-01.md)，未关闭项见 [后续清单](follow-ups/web.md)；下方历史验证按执行日期保留。
 
+2026-10-01 归档后调整：用户实际体验反馈基本可用，要求默认启用文件/命令工具、可配置审批、简化名称并支持全部工具勾选。当前行为和新验证见 [工具设置调整记录](acceptance/web-tool-settings-2026-10-01.md)，不回填归档基线的测试数字。
+
 2026-09-29: 根据用户要求直接实现, 本扩展不使用教学练习或待填 TODO, 也不改变 M11 的验收状态。
 
 2026-10-01: 按[后续计划](design/web-continuation.md)补齐 Bash 启动、显式中断恢复、完成 checkpoint 分支和流式文本。该轮验证单列于计划执行记录，不回填下方 2026-09-29 的历史结果。
@@ -18,14 +20,14 @@
 - 服务端持有运行任务, 浏览器刷新/断线不主动取消, 显式停止按 run_id 取消并等待清理。
 - 内建 Pi Workbench 系统提示词负责身份与工具边界; 项目规则独立使用 `PI-AGENTS.md`, 不加载 Codex 的 `AGENTS.md` / `CLAUDE.md`。规范见 [PI-AGENTS.md 规范](pi-agents.md)。
 - 深色像素风工作台; 欢迎页覆盖写作、分析、规划与工作区任务。
-- 设置面板可更换本地工作区、启用/停用 `read`、`list`、`search`, 并分别配置每轮运行的调用上限 (0–20, 默认各 4); 达到单工具上限后会返回明确的未执行结果。已创建会话固定使用创建时的工作区, 设置应用于后续运行。
+- 设置面板可更换本地工作区、启用/停用全部六项工具；`read`、`list`、`search` 可分别配置每轮调用上限 (0–20, 默认各 4)。默认全部选中，右侧工具区也可直接勾选；选择和上限保存后从下一轮生效，进行中的一轮沿用启动时的快照。已创建会话固定使用创建时的工作区。
 - 执行时间线中已完成的模型/工具节点可点击查看安全投影后的输入、输出与 checkpoint 前后快照; 系统提示词及原始图状态不会发送到浏览器。
 - 持久化请求标识与内容摘要防止重复执行; 同一标识配不同内容返回 409。
 - 消息按指定 checkpoint 分页, 每页最多 40 条、每条最多 16 KiB UTF-8, 长内容显示截断提示。
 - 重启后保留会话; 未结束的运行登记为 needs_recovery, 不自动重放。用户点击“继续运行”后从当前 checkpoint 继续只读图，不追加第二条用户消息；可能重新调用未完成的模型/只读工具。
 - 会话操作中可选择已完成的 checkpoint 创建独立分支。分支继承来源工作区并复制选中状态，不运行模型或工具；来源历史不变。列表展示最近 200 个快照中的最多 50 个完成 checkpoint。
 - 服务 start/status/stop/restart；实例记录绑定数据库、PID、进程启动身份与随机控制令牌；旧版/身份不匹配的进程只报告占用，不自动控制。
-- 服务端启用后，模型可准备 `write` / `edit` 或 `propose_command` 提案。Web 展示文件 diff/完整转义内容、精确 executable/argv/cwd 与结果，批准/拒绝去重并回灌模型；刷新和重启保留待审批提案。
+- 模型可准备 `write` / `edit` 或 `propose_command` 提案，界面显示 `write`、`edit`、`command`。默认工具启用且修改/命令需审批；启动参数可关闭人工审批。两种模式均持久记录操作身份、结果并回灌模型；刷新和重启保留待审批提案。
 
 ## 启动
 
@@ -86,10 +88,18 @@ PowerShell 使用 `-Action status|stop|restart` 和 `-Force`。也可直接运�
 
 ```bash
 ./scripts/start-web.sh --provider compatible --workspace ./safe-workspace \
-  --enable-file-mutations --allow-executable /usr/bin/git
+  --require-approval
+
+# 关闭人工审批，直接执行当前选中的 write/edit/command。
+./scripts/start-web.sh --provider compatible --no-require-approval
+
+# 自定义允许列表会替换默认系统 shell，可重复指定多个程序。
+./scripts/start-web.sh --provider compatible --allow-executable /usr/bin/git
 ```
 
-PowerShell 对应 `-EnableFileMutations -AllowExecutable 'C:\\path\\to\\git.exe'`；多个程序使用字符串数组，Bash 重复 `--allow-executable`。默认两类能力均关闭，Web 设置或模型不能扩展启动 allowlist。命令 cwd 固定为会话工作区，每份提案都需人工决策，进程使用当前本机用户权限。
+默认六项工具全部选中，文件与命令需人工审批。PowerShell 关闭审批使用 `-RequireApproval $false`；自定义程序使用 `-AllowExecutable 'C:\\path\\to\\git.exe'`，多个程序使用字符串数组。默认程序是 macOS/Linux `/bin/sh` 或 Windows 系统 `cmd.exe`；允许 shell 后可通过 argv 执行脚本或 `-c`（Windows `/c`）命令，进程使用当前本机用户权限。Web 设置或模型不能扩展启动 allowlist；命令 cwd 固定为会话工作区。
+
+右侧工具区与设置面板均可取消勾选全部或个别工具，设置跨刷新/重启保留；未选中的工具不会绑定给模型，强行调用也不会执行。运行中可以保存工具选择，但更换工作区需要等待当前运行结束。旧版仅有只读工具的设置首次升级会补选 write/edit/command，之后不覆盖用户取消选择。服务端硬禁用使用 `--no-enable-file-mutations` / `--disable-command`，PowerShell 对应 `-EnableFileMutations:$false` / `-DisableCommand`；页面不能重新开放硬禁用能力。
 
 文件首版仅支持单个 UTF-8 文本文件的创建/完整替换和唯一精确 edit；修改前后各不超过 32 KiB，不支持删除、二进制或批量批准。界面显示完整 diff 和可展开的转义内容（包含换行）；批准后重新检查路径、版本和能力，再原子替换，已有文件权限保留。`.env`、`.git`、密钥等敏感路径受同一策略保护。
 
@@ -103,6 +113,8 @@ fake 可离线验证完整审批链，例如发送以下文本（需先启用文
 离线命令演示语法为 `执行 {"executable":"启动时允许的程序","argv":["--version"],"timeout_seconds":5}`。它仍创建实际待审提案，不是模拟成功；程序参数由用户完整审查。
 
 等待审批时不保留模型连接、不允许发送下一轮或用普通恢复绕过决策。多个工具调用依次审批；分支只复制完成 checkpoint，不复制待执行授权。SQLite 认领和外部副作用不是同一事务：崩溃后的 claimed 操作标记 uncertain，人工核对后可继续模型对话，但原副作用不会自动重跑。取消/超时可能已产生部分外部效果；结果标记不会替用户撤销效果。
+
+关闭审批仅影响新准备的操作。每份提案持久保存其审批策略；旧待审批提案即使以 `--no-require-approval` 重启仍需人工处理。自动模式仍先保存提案，再认领、执行并保存结果，不绕过路径、敏感文件、版本、程序列表、超时、取消和重放检查。
 
 ## 开发与模块
 

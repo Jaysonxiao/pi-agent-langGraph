@@ -397,3 +397,8 @@ h1 > span { color: #a6d6a4; }
 .approval-actions button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; }
 .approval-actions .approve-button { background: var(--accent); color: white; }
 .approval-actions button:disabled { opacity: .5; cursor: default; }
+
+.tool-chips label { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 0; cursor: pointer; font-size: 11px; color: var(--muted); }
+.tool-chips input { margin: 0; accent-color: var(--accent); }
+
+.tool-chips label:has(input:checked) { color: #a6d6a4; border-color: #4b635f; background: #1b302f; }
