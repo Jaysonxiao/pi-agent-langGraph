@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeActivities, mergePreview, type Activity, type Preview } from './api';
+import { mergeActivities, mergePreview, mergeUsage, type Activity, type Preview, type UsageView } from './api';
 
 const event = (id: number): Activity => ({ event_id: id, session_id: 's', run_id: 'r', phase: 'before_tool', tool_name: 'read', outcome: null, created_at: '' });
 
@@ -11,6 +11,18 @@ describe('activity reconciliation', () => {
     const result = mergeActivities([], Array.from({ length: 1000 }, (_, i) => event(i)));
     expect(result).toHaveLength(256);
     expect(result[0].event_id).toBe(744);
+  });
+});
+
+describe('usage reconciliation', () => {
+  const usage = (revision: number, session_id = 'one', server_epoch = 'server'): UsageView => ({ revision, session_id, server_epoch, overall: { input_tokens: 0, output_tokens: 0, total_tokens: 0, recorded_calls: 0, unknown_calls: 0, pending_calls: 0 }, session: { input_tokens: null, output_tokens: null, total_tokens: null, recorded_calls: 1, unknown_calls: 1, pending_calls: 0 } });
+  it('does not replace a newer streaming update with an older polling result', () => {
+    expect(mergeUsage(usage(4), usage(3)).revision).toBe(4);
+    expect(mergeUsage(usage(4), usage(5)).revision).toBe(5);
+  });
+  it('accepts a switched session or a restarted service', () => {
+    expect(mergeUsage(usage(4), usage(3, 'two')).session_id).toBe('two');
+    expect(mergeUsage(usage(4), usage(1, 'one', 'new')).server_epoch).toBe('new');
   });
 });
 

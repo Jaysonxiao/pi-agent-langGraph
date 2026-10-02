@@ -34,7 +34,7 @@
 | 🧠 上下文管理 | 项目规则、模板、近似 token 预算、历史压缩与摘要 | 上下文管线 / `context inspect` |
 | 🛡️ 工具与执行控制 | 工作区路径约束；Web 文件差异与命令提案经人工批准后执行；CLI 命令交互审批 | Web 审批 / `command` |
 | ⚙️ 启动与服务管理 | Windows、macOS/Linux 启动；查询、停止、重启与锁/端口冲突诊断 | 启动脚本 / `pi-agent-web` |
-| 🔎 过程与评测 | Web 节点详情、图事件、可选 telemetry、离线工具评测 | Web / CLI / eval |
+| 🔎 过程与评测 | Web 累计/会话 Token 用量、默认展开节点快照、图事件、可选 telemetry、离线工具评测 | Web / CLI / eval |
 | 🔌 本机客户端与服务端 | 共享令牌认证、创建会话、发送请求、取消与快照 | `pi-agent-server` / `pi-agent-client` |
 
 一次“读取文件并总结”的请求如何流转（compatible 运行路径）：
@@ -381,7 +381,7 @@ PI_AGENT_API_KEY=replace-with-your-api-key
 <details>
 <summary>能自动修改文件、执行命令或部署到公网吗？</summary>
 
-当前 Web 默认开启文件修改和命令工具，默认人工审批；启动时可用 `--no-require-approval` 关闭审批。所有工具可取消勾选，从下一轮生效。CLI 的命令执行仍需要允许列表、持久化提案与人工批准。结果不确定的操作不自动重放。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；当前参数与验证见 [工具设置调整记录](docs/acceptance/web-tool-settings-2026-10-01.md)。
+当前 Web 默认开启文件修改和命令工具，默认人工审批；启动时可用 `--no-require-approval` 关闭审批。所有工具可取消勾选，并分别设置每次用户请求的最大调用次数（0–20，新设置默认各 20），从下一轮生效；审批继续和恢复沿用原额度，旧设置保留已保存的数值。侧栏会话按工作区分组。当前说明见 [Web 使用文档](docs/web-ui.md)。CLI 的命令执行仍需要允许列表、持久化提案与人工批准。结果不确定的操作不自动重放。本机 Web / TCP 服务不提供多用户身份、TLS 或公网部署能力；当前参数与验证见 [工具设置调整记录](docs/acceptance/web-tool-settings-2026-10-01.md)。
 
 </details>
 

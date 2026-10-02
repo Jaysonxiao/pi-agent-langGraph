@@ -123,7 +123,18 @@ async def async_tool_node(
         try:
             limit = runtime.context.tool_call_limits.get(tool_name)
             count = runtime.context.tool_call_counts.get(tool_name, 0)
-            if limit is not None and count >= limit:
+            budget = runtime.context.tool_budget
+            if budget is not None:
+                if not assistant_message.id:
+                    raise ValueError("A durable tool budget requires a model message identity.")
+                allowed = budget.reserve(
+                    message_id=assistant_message.id, tool_call_id=tool_call_id, tool_name=tool_name
+                )
+            else:
+                allowed = limit is None or count < limit
+                if allowed:
+                    runtime.context.tool_call_counts[tool_name] = count + 1
+            if not allowed:
                 result = create_error_tool_message(
                     call,
                     code="tool_call_limit",
@@ -133,7 +144,6 @@ async def async_tool_node(
                     details={"tool": tool_name, "limit": limit},
                 )
             else:
-                runtime.context.tool_call_counts[tool_name] = count + 1
                 executor = runtime.context.coding_executor
                 if executor is not None and tool_name in {"write", "edit", "propose_command"}:
                     result = await executor.execute(

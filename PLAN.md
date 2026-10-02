@@ -2,6 +2,16 @@
 
 ## 1. 当前状态与文档分工
 
+- 2026-10-02 发布授权：用户要求 push 今天的代码，将审批卡片修复、会话工作区分组、六项工具持久额度、checkpoint 关联修复、Token 统计及节点弹窗优化统一提交本地 `main` 并推送 `origin/main`。沿用本轮已执行的 675 passed/6 skipped、Web 84 passed、Chrome E2E 11 passed、前端 9 passed/构建与类型/格式检查证据；不回填此前记录的提交状态和验证数字，不宣称新增真实模型、平台或部署验证。
+
+- 2026-10-02 Web Token 与节点展示：累计覆盖当前数据库全部会话及归档，当前会话按实际模型请求计数，分支复制历史不重复计入。Web SQLite 账本跨重试、审批继续及重启保留，流式 usage 到达时 SSE 更新；未提供/部分未知明确提示。节点弹窗默认展开前后快照，优化分栏、复制、滚动和手机布局。严格全仓 675 passed/6 skipped、Chrome E2E 11 passed、前端 9 passed/构建及 mypy/Ruff 通过，见 [独立验收](docs/acceptance/web-token-usage-2026-10-02.md)。未运行新 live gate，思考强度暂不实现；未提交或推送。
+
+- 2026-10-02 Web 节点 checkpoint 详情修复：用户报告快照暂不可用，复现审批继续和多工具事件错配。活动新增实际 checkpoint ID/调用 ID，详情按所属会话直接关联图任务；工具输出按调用定位，前后快照覆盖整批。未完成批次与取消节点明确提示，旧活动兼容定位。严格全仓 666 passed/6 skipped、Chrome E2E 10 passed、前端 7 passed/构建及 mypy/Ruff 通过，见 [独立验收](docs/acceptance/web-node-checkpoints-2026-10-02.md)；未提交或推送。
+
+- 2026-10-02 Web 工作区分组与工具额度：用户认可评估并授权实现。侧栏按保存的完整工作区路径分组，支持折叠、搜索与归档；六项工具均有 0–20 的每次用户请求额度，新设置默认各 20，旧数值保留。额度独立于审批方式，失败/拒绝占槽，同一操作重入不重复扣除，审批继续及取消/重启恢复沿用原额度。本轮未新增审批策略。严格全仓 660 passed/6 skipped、Chrome E2E 10 passed、前端 7 passed/构建、mypy/Ruff 和 CLI smoke/eval 通过，未发现 CLI/TCP 回归。见 [独立验收](docs/acceptance/web-workspace-budgets-2026-10-02.md)；保留工作区，未提交或推送，不回填此前归档数字。
+
+- 2026-10-02 Web 缺陷修复：用户发现批准命令卡片集中追加到聊天末尾。已将 write/edit/command 卡片关联到所属模型请求，按调用顺序随消息展示，分页和旧数据库记录同样适用；不修改审批执行行为。严格全仓 642 passed/6 skipped、Chrome E2E 9 passed、前端单测/构建与 mypy/Ruff 通过，见 [修复验收](docs/acceptance/web-approval-history-2026-10-02.md)。本次修复保留在工作区，不回填此前归档数字，不推送远端。
+
 - 2026-10-01 整体复审归档：用户要求核对当天全部 Web 改造与 CLI 基线，确认兼容后提交本地 main。复审修正 PI-AGENTS.md 的旧只读指令冲突，补充旧 CLI 审批数据迁移/恢复隔离回归；未发现 CLI/TCP 行为回归。最终严格 pytest 640 passed/6 skipped、Chrome E2E 8 passed、前端单测/构建、mypy/Ruff、CLI smoke/eval 与真实 Bash 启动通过。初始 Web、两轮扩展及工具设置调整整体归档；详见 [整体复审记录](docs/acceptance/web-cli-review-2026-10-01.md)。保留平台/live/部署边界，仍不 push。
 
 - 2026-10-01 归档后调整：用户反馈本机 Web 基本可用，并授权默认开启全部工具、增加审批启动参数、简化 write/edit/command 展示和全部工具勾选。已实现下一轮设置快照、选择持久化及旧设置迁移，默认仍需审批；关闭审批的新操作仍使用持久提案与认领，旧待审批操作不自动批准。独立验证见 [工具设置调整记录](docs/acceptance/web-tool-settings-2026-10-01.md)，不回填下方归档基线或新增里程碑；仍不 push。

@@ -8,6 +8,7 @@ from typing import Literal
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.runtime import get_runtime
 from langgraph.types import StateSnapshot
 
 from pi_agent.context.default_prompt import workbench_prompt
@@ -28,6 +29,8 @@ from pi_agent.web.schemas import (
     CODING_TOOL_NAMES,
     DEFAULT_TOOL_CALL_LIMITS,
     MAX_TOOL_CALLS_PER_TOOL,
+    TOOL_NAMES,
+    Activity,
     ApprovalAction,
     CheckpointAction,
     CheckpointItem,
@@ -42,9 +45,12 @@ from pi_agent.web.schemas import (
     SettingsUpdate,
     StepDetail,
     StreamingPreview,
+    UsageView,
 )
 from pi_agent.web.store import WebStore
+from pi_agent.web.tool_budget import WebToolBudget, initialize_tool_budgets, open_tool_budget
 from pi_agent.web.tool_policy import default_executables
+from pi_agent.web.usage import WebUsageModel, WebUsageStore
 
 
 class WebError(Exception):
@@ -84,6 +90,10 @@ class Workbench:
         self.approvals.initialize()
         self.epoch = uuid4().hex
         self.store = WebStore(database, self.default_workspace)
+        self.usage_store = WebUsageStore(self.store)
+        self.usage_lock = asyncio.Lock()
+        self.usage_ready = False
+        initialize_tool_budgets(self.store)
         self.enabled_tools: tuple[str, ...]
         self.tool_call_limits: dict[str, int]
         saved_settings = self.store.settings()
@@ -96,7 +106,7 @@ class Workbench:
             saved_workspace, saved_tools, saved_tool_limits = saved_settings
             candidate = Path(saved_workspace).resolve()
             valid_limits = set(saved_tool_limits) == set(DEFAULT_TOOL_CALL_LIMITS) and all(
-                isinstance(limit, int) and 0 <= limit <= MAX_TOOL_CALLS_PER_TOOL
+                type(limit) is int and 0 <= limit <= MAX_TOOL_CALLS_PER_TOOL
                 for limit in saved_tool_limits.values()
             )
             if (
@@ -122,6 +132,46 @@ class Workbench:
     def require_session(self, session_id: str) -> None:
         if self.store.session(session_id) is None:
             raise WebError(404, "找不到这个会话。")
+
+    async def ensure_usage(self) -> None:
+        if self.usage_ready:
+            return
+        async with self.usage_lock:
+            cutoff, imported = self.usage_store.migration_state()
+            if not imported:
+                before = datetime.fromisoformat(cutoff)
+                records: list[tuple[str, str, Mapping[str, object] | None]] = []
+                sessions = sorted(
+                    self.store.catalog.list_sessions(), key=lambda item: item.created_at
+                )
+                async with open_async_sqlite_checkpointer(self.database) as saver:
+                    graph = build_async_tool_graph(saver)
+                    for item in sessions:
+                        state = await graph.aget_state(session_config(item.session_id))
+                        created = _snapshot_time(state)
+                        if created is not None and created > before:
+                            continue
+                        messages = list(state.values.get("messages", []))
+                        for task in state.tasks:
+                            if task.name == "model" and isinstance(task.result, Mapping):
+                                messages.extend(task.result.get("messages", []))
+                        for message in messages:
+                            if isinstance(message, AIMessage) and message.id:
+                                records.append(
+                                    (
+                                        f"legacy:{message.id}",
+                                        item.session_id,
+                                        message.usage_metadata,
+                                    )
+                                )
+                self.usage_store.import_history(records)
+            self.usage_ready = True
+
+    async def usage(self, session_id: str | None = None) -> UsageView:
+        if session_id is not None:
+            self.require_session(session_id)
+        await self.ensure_usage()
+        return self.usage_store.snapshot(session_id, self.epoch)
 
     @property
     def available_tools(self) -> tuple[str, ...]:
@@ -157,8 +207,8 @@ class Workbench:
         async with self.lock:
             if len(settings.tools) != len(set(settings.tools)):
                 raise WebError(422, "工具不能重复选择。")
-            if set(settings.tool_limits) != set(DEFAULT_TOOL_CALL_LIMITS):
-                raise WebError(422, "请为 read、list、search 分别设置调用上限。")
+            if set(settings.tool_limits) not in (set(TOOL_NAMES), set(ALL_TOOL_NAMES)):
+                raise WebError(422, "请为六项工具分别设置调用上限。")
             if not set(settings.tools).issubset(self.available_tools):
                 raise WebError(422, "不能启用服务端未开放的工具。")
             try:
@@ -173,10 +223,10 @@ class Workbench:
                 raise WebError(409, "请等待当前运行结束后再修改工作区; 工具选择可提前保存。")
             self.workspace = workspace
             self.enabled_tools = tuple(settings.tools)
+            # Older browser clients send only the three read-only limits.
             self.tool_call_limits = {
-                "read": settings.tool_limits["read"],
-                "list": settings.tool_limits["list"],
-                "search": settings.tool_limits["search"],
+                **self.tool_call_limits,
+                **{name: limit for name, limit in settings.tool_limits.items()},
             }
             self.store.save_settings(str(workspace), self.enabled_tools, self.tool_call_limits)
         return self.public_config("", "")
@@ -206,12 +256,36 @@ class Workbench:
             needs_recovery=bool(state.next or state.interrupts)
             and not self.coordinator.is_busy(session_id)
             and not awaiting,
-            history=project_history(state),
+            history=self.history(session_id, state),
             activities=self.store.events(session_id),
             preview=self.previews.get(session_id),
             awaiting_approval=awaiting,
             proposals=[proposal_projection(proposal) for proposal in proposals],
         )
+
+    def history(
+        self, session_id: str, state: StateSnapshot, before: int | None = None
+    ) -> MessagePage:
+        """Attach proposals to their model request, including paged historical operations."""
+        page = project_history(state, before)
+        assistant_ids = tuple(item.message_id for item in page.messages if item.role == "assistant")
+        proposals = self.approvals.proposals(session_id, message_ids=assistant_ids)
+        by_call = {(proposal.message_id, proposal.tool_call_id): proposal for proposal in proposals}
+        requests = {
+            message.id: message
+            for message in state.values.get("messages", [])
+            if isinstance(message, AIMessage)
+        }
+        for item in page.messages:
+            request = requests.get(item.message_id) if item.role == "assistant" else None
+            if request is not None:
+                item.proposals = [
+                    proposal_projection(proposal)
+                    for call in request.tool_calls
+                    if isinstance(call_id := call.get("id"), str)
+                    if (proposal := by_call.get((item.message_id, call_id))) is not None
+                ]
+        return page
 
     async def decide(self, session_id: str, proposal_id: str, action: ApprovalAction) -> RunItem:
         async with self.lock:
@@ -278,54 +352,60 @@ class Workbench:
         run = self.store.run(activity.run_id)
         if run is None:
             raise WebError(404, "找不到这次运行。")
-        started_at = datetime.fromisoformat(run.created_at)
-        phase_events = [
-            item
-            for item in self.store.events(session_id)
-            if item.run_id == activity.run_id and item.phase == activity.phase
-        ]
-        try:
-            node_index = next(
-                index for index, item in enumerate(phase_events) if item.event_id == event_id
-            )
-        except (StopIteration, IndexError):
-            raise WebError(404, "这个节点的执行记录不可用。") from None
-
+        if activity.outcome == "cancelled":
+            raise WebError(409, "此节点执行被取消, 没有提交完成结果的 checkpoint。")
         after: StateSnapshot | None = None
-        chronological: list[StateSnapshot] = []
         for attempt in range(10):
             async with open_async_sqlite_checkpointer(self.database) as saver:
                 graph = build_async_tool_graph(saver)
-                history = [
-                    snapshot
-                    async for snapshot in graph.aget_state_history(session_config(session_id))
-                ]
-            chronological = sorted(history, key=lambda item: _snapshot_time(item) or started_at)
-            node_snapshots = [
-                snapshot
-                for snapshot in chronological
-                if _pending_node_result(snapshot, node) is not None
-                and (_snapshot_time(snapshot) or started_at) >= started_at
-            ]
-            if node_index < len(node_snapshots):
-                after = node_snapshots[node_index]
+                if activity.checkpoint_id:
+                    after = await graph.aget_state(
+                        checkpoint_config(session_id, activity.checkpoint_id)
+                    )
+                else:
+                    history = [
+                        snapshot
+                        async for snapshot in graph.aget_state_history(session_config(session_id))
+                    ]
+                    after = _legacy_activity_snapshot(history, activity, node)
+            if after is not None and _pending_node_result(after, node) is not None:
                 break
-            current_run = self.store.run(activity.run_id)
-            if current_run is None or current_run.status != "running" or attempt == 9:
+            if not self.coordinator.is_busy(session_id) or attempt == 9:
                 break
             await asyncio.sleep(0.05)
-        if after is None:
-            raise WebError(404, "这个节点的 checkpoint 快照暂不可用, 请稍后重试。")
+        if after is None or after.created_at is None:
+            raise WebError(404, "无法找到此节点关联的 checkpoint, 旧执行记录可能缺少关联信息。")
+        update = _pending_node_result(after, node)
+        if update is None:
+            if node == "tools":
+                raise WebError(
+                    409,
+                    "此工具已结束, 但整批工具节点尚未提交 checkpoint。"
+                    "请等待其余工具完成或处理剩余审批。",
+                )
+            raise WebError(409, "此模型节点尚未提交结果快照, 可能仍在运行或已中断。")
 
         before_values = after.values if isinstance(after.values, Mapping) else {}
         after_values = before_values
-        update = _pending_node_result(after, node) or {}
         delta = update.get("messages", []) if isinstance(update, Mapping) else []
-        output = _display_messages(delta if isinstance(delta, (list, tuple)) else [])
+        results = delta if isinstance(delta, (list, tuple)) else []
+        if node == "tools":
+            results = [
+                message
+                for message in results
+                if isinstance(message, ToolMessage)
+                and (
+                    message.tool_call_id == activity.tool_call_id
+                    if activity.tool_call_id
+                    else message.name == activity.tool_name
+                )
+            ]
+        output = _display_messages(results)
         input_messages = before_values.get("messages", [])
         title = "模型响应" if node == "model" else f"工具 {activity.tool_name}"
         return StepDetail(
             event_id=event_id,
+            checkpoint_id=str(after.config["configurable"]["checkpoint_id"]),
             title=title,
             node=node,
             input=_display_messages(
@@ -418,6 +498,7 @@ class Workbench:
         approval_text: str | None = None,
     ) -> RunItem:
         # Reserve and persist before returning 202; browser disconnect never owns this task.
+        await self.ensure_usage()
         async with self.lock:
             self.require_session(session_id)
             resume = isinstance(request, CheckpointAction)
@@ -456,6 +537,37 @@ class Workbench:
             if self.database.resolve().is_relative_to(session_workspace):
                 raise WebError(409, "此会话工作区包含 Web 会话数据库, 请新建会话。")
             run_id = uuid4().hex
+            turn_id = uuid4().hex
+            if resume:
+                user = next(
+                    (
+                        m
+                        for m in reversed(state.values.get("messages", []))
+                        if isinstance(m, HumanMessage)
+                    ),
+                    None,
+                )
+                if user is None or not user.id:
+                    raise WebError(409, "无法确认待恢复任务的原始用户消息。")
+                turn_id = user.id
+            budget = open_tool_budget(
+                self.store,
+                session_id,
+                turn_id,
+                self.tool_call_limits,
+                self.selected_tools,
+                history=state.values.get("messages", []) if resume else (),
+                proposals=self.approvals.proposals(
+                    session_id,
+                    message_ids=tuple(
+                        m.id
+                        for m in state.values.get("messages", [])
+                        if isinstance(m, AIMessage) and m.id
+                    ),
+                )
+                if resume
+                else (),
+            )
             lease = self.coordinator.try_claim_run(session_id, run_id)
             try:
                 record = self.store.add_run(
@@ -470,8 +582,8 @@ class Workbench:
                     lease,
                     text,
                     session_workspace,
-                    self.selected_tools,
-                    self.tool_call_limits.copy(),
+                    tuple(name for name in budget.tools if name in self.selected_tools),
+                    budget,
                     resume=resume,
                 )
             )
@@ -485,15 +597,22 @@ class Workbench:
         text: str,
         workspace: Path,
         enabled_tools: tuple[str, ...],
-        tool_call_limits: dict[str, int],
+        tool_budget: WebToolBudget,
         *,
         resume: bool = False,
     ) -> None:
         hooks = HookRegistry()
 
         async def observe(event: HookEvent) -> None:
+            execution = get_runtime().execution_info if event.node in {"model", "tools"} else None
             self.store.event(
-                event.thread_id, event.run_id, event.phase, event.tool_name, event.outcome
+                event.thread_id,
+                event.run_id,
+                event.phase,
+                event.tool_name,
+                event.outcome,
+                checkpoint_id=execution.checkpoint_id if execution else None,
+                tool_call_id=event.tool_call_id,
             )
 
         hooks.register("web-activity", observe)
@@ -513,8 +632,9 @@ class Workbench:
             database=self.database,
             workspace=workspace,
             session_id=lease.session_id,
-            enabled_tools=tuple(name for name in enabled_tools if name in DEFAULT_TOOL_CALL_LIMITS),
-            tool_call_limits=tool_call_limits,
+            enabled_tools=tuple(name for name in enabled_tools if name in TOOL_NAMES),
+            tool_call_limits=tool_budget.limits,
+            tool_budget=tool_budget,
             instruction_filename=PI_INSTRUCTION_FILENAME,
             prompt_template=workbench_prompt(
                 file_mutations=bool({"write", "edit"}.intersection(enabled_tools)),
@@ -546,9 +666,11 @@ class Workbench:
                     lease,
                     lambda _token: run_session(
                         config,
-                        model=self.model,
+                        model=WebUsageModel(
+                            self.model, self.usage_store, lease.session_id, lease.run_id
+                        ),
                         content=text,
-                        message_id=uuid4().hex,
+                        message_id=tool_budget.turn_id,
                         resume=resume,
                     ),
                 )
@@ -643,6 +765,24 @@ def _pending_node_result(snapshot: StateSnapshot, node: str) -> Mapping[str, obj
         if task.name == node and isinstance(task.result, Mapping):
             return task.result
     return None
+
+
+def _legacy_activity_snapshot(
+    history: list[StateSnapshot], activity: Activity, node: str
+) -> StateSnapshot | None:
+    """Old events have no checkpoint identity; use the latest matching task at event time.
+
+    Include unfinished tasks so a pending batch cannot be confused with an older
+    completed batch. A resumed task's checkpoint predates the new run receipt.
+    """
+    event_time = datetime.fromisoformat(activity.created_at)
+    candidates = [
+        (created, snapshot)
+        for snapshot in history
+        if (created := _snapshot_time(snapshot)) is not None and created <= event_time
+        if any(task.name == node for task in snapshot.tasks)
+    ]
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
 
 
 def _snapshot_time(snapshot: StateSnapshot) -> datetime | None:

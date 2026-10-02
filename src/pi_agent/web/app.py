@@ -36,8 +36,9 @@ from pi_agent.web.schemas import (
     SessionView,
     SettingsUpdate,
     StepDetail,
+    UsageView,
 )
-from pi_agent.web.service import WebError, Workbench, project_history
+from pi_agent.web.service import WebError, Workbench
 
 
 def default_web_database() -> Path:
@@ -207,6 +208,12 @@ def create_app(
     async def sessions(archived: bool = False) -> list[SessionItem]:
         return workbench.store.sessions(archived)
 
+    @app.get("/api/usage")
+    async def usage(
+        session_id: str | None = Query(default=None, min_length=1, max_length=255),
+    ) -> UsageView:
+        return await workbench.usage(session_id)
+
     @app.post("/api/sessions", status_code=201)
     async def create_session() -> SessionItem:
         from uuid import uuid4
@@ -236,7 +243,7 @@ def create_app(
         state = await workbench.state(session_id, checkpoint)
         if state.created_at is None:
             raise WebError(404, "历史检查点不存在。")
-        return project_history(state, before)
+        return workbench.history(session_id, state, before)
 
     @app.get("/api/sessions/{session_id}/activities/{event_id}")
     async def activity_detail(session_id: str, event_id: int) -> StepDetail:
@@ -283,13 +290,19 @@ def create_app(
         workbench.require_session(session_id)
 
         async def stream() -> AsyncIterator[str]:
+            await workbench.ensure_usage()
             # Always resync on connection: a bounded event log is not a complete run journal.
             initial = workbench.store.events(session_id)
             cursor = initial[-1].event_id if initial else 0
             yield f"event: sync\nid: {cursor}\ndata: {{}}\n\n"
             idle = 0
             preview_revision = -1
+            usage_revision = -1
             while not workbench.closing and not await request.is_disconnected():
+                if workbench.usage_store.revision() != usage_revision:
+                    usage = workbench.usage_store.snapshot(session_id, workbench.epoch)
+                    usage_revision = usage.revision
+                    yield f"event: usage\ndata: {usage.model_dump_json()}\n\n"
                 preview = workbench.previews.get(session_id)
                 if preview is not None and preview.revision != preview_revision:
                     preview_revision = preview.revision

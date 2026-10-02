@@ -208,7 +208,14 @@ def test_workspace_and_tool_settings_are_validated_saved_and_session_scoped(tmp_
         assert changed.status_code == 200, changed.text
         assert changed.json()["workspace"] == str(alternate_workspace.resolve())
         assert changed.json()["capabilities"] == ["read", "search"]
-        assert changed.json()["tool_limits"] == {"read": 7, "list": 4, "search": 2}
+        assert changed.json()["tool_limits"] == {
+            "read": 7,
+            "list": 4,
+            "search": 2,
+            "write": 20,
+            "edit": 20,
+            "propose_command": 20,
+        }
         assert client.get(f"/api/sessions/{original}").json()["session"]["workspace"] == str(
             original_workspace.resolve()
         )
@@ -252,7 +259,14 @@ def test_workspace_and_tool_settings_are_validated_saved_and_session_scoped(tmp_
         saved = client.get("/api/bootstrap", headers=HEADERS).json()
         assert saved["workspace"] == str(alternate_workspace.resolve())
         assert saved["capabilities"] == ["read", "search"]
-        assert saved["tool_limits"] == {"read": 7, "list": 4, "search": 2}
+        assert saved["tool_limits"] == {
+            "read": 7,
+            "list": 4,
+            "search": 2,
+            "write": 20,
+            "edit": 20,
+            "propose_command": 20,
+        }
 
 
 class SlowModel:

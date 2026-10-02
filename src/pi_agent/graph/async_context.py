@@ -11,6 +11,7 @@ from pi_agent.models.streaming import TextObserver
 from pi_agent.runtime.cancellation import AsyncCancellationToken
 from pi_agent.runtime.coding import CodingExecutor
 from pi_agent.runtime.policy import RetryPolicy
+from pi_agent.runtime.tool_budget import ToolCallBudget
 from pi_agent.tools.async_registry import AsyncToolRegistry
 
 
@@ -35,6 +36,7 @@ class AsyncRunContext:
     run_id: str | None = None
     # 与 Provider 边界共用同一个 count(), 保证 run/model 事件 sequence 严格递增.
     hook_sequence: Iterator[int] = field(default_factory=count)
+    tool_budget: ToolCallBudget | None = None
 
     def __post_init__(self) -> None:
         if self.max_tool_rounds < 0:

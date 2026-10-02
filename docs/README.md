@@ -13,6 +13,10 @@
 | Web 已交付范围归档 | [Web 归档](acceptance/web-archive-2026-10-01.md)、[归档后续清单](follow-ups/web.md) | 2026-10-01 用户授权本机范围归档及本地 main 合并；暂不 push，平台与部署验证保留 |
 | Web 工具设置调整 | [调整记录](acceptance/web-tool-settings-2026-10-01.md) | 归档后用户体验反馈：默认开启六项工具、审批开关、command 名称、下一轮勾选生效 |
 | Web 整体复审与 CLI 兼容性 | [整体复审归档](acceptance/web-cli-review-2026-10-01.md) | 覆盖全部 Web 已交付范围与工具调整；修正旧只读指令，复验 CLI/TCP 基线及旧审批数据，提交本地 main |
+| Web 审批卡片位置修复 | [修复验收](acceptance/web-approval-history-2026-10-02.md) | 2026-10-02：卡片跟随所属工具请求，覆盖多轮、刷新、重启与历史分页；独立保留新验证结果 |
+| Web 工作区分组与工具额度 | [独立验收](acceptance/web-workspace-budgets-2026-10-02.md) | 2026-10-02：侧栏分组；六项工具默认各 20，持久额度跨审批/恢复，保留旧设置 |
+| Web 节点 checkpoint 详情 | [修复验收](acceptance/web-node-checkpoints-2026-10-02.md) | 2026-10-02：按实际 checkpoint/调用 ID 关联，修复审批继续和多工具错配；整批与取消边界 |
+| Web Token 与节点展示 | [独立验收](acceptance/web-token-usage-2026-10-02.md) | 2026-10-02：持久累计/会话用量、未知提示、SSE 更新；默认展开快照及桌面/手机弹窗 |
 | Web 使用与首轮扩展 | [Web UI](web-ui.md)、[2026-10-01 原计划及证据](design/web-continuation.md) | 启动、流式文本、中断恢复与 checkpoint 分支；保留该轮测试数字 |
 | Web 服务管理与 Coding Tools | [原开发计划](design/web-coding-plan.md)、[独立验收记录](acceptance/web-coding-2026-10-01.md) | 用户选择任务 1、2、4、5；代码与本机/live 验证已归档，未执行项转入后续清单 |
 | M10 远程接入设计与练习 | [M10 设计](design/M10.md) | 系统链路、Pi 源码映射、M10.1–M10.4 复盘；切片状态与验证命令仍由 PLAN 管理 |

@@ -20,6 +20,7 @@ from pi_agent.runtime.cancellation import AsyncCancellationToken
 from pi_agent.runtime.coding import CodingExecutor
 from pi_agent.runtime.policy import RetryPolicy
 from pi_agent.runtime.read_only import create_async_read_only_registry
+from pi_agent.runtime.tool_budget import ToolCallBudget
 from pi_agent.security import WorkspacePathPolicy
 from pi_agent.sessions import open_async_sqlite_checkpointer, run_async_session_turn
 from pi_agent.sessions.config import session_config
@@ -44,6 +45,7 @@ class SessionRuntimeConfig:
     prompt_template: str = field(default="{instructions}", kw_only=True)
     text_observer: TextObserver | None = field(default=None, kw_only=True)
     coding_executor: CodingExecutor | None = field(default=None, kw_only=True)
+    tool_budget: ToolCallBudget | None = field(default=None, kw_only=True)
 
 
 async def run_session(
@@ -75,6 +77,7 @@ async def run_session(
         if config.tool_call_limits
         else 4,
         tool_call_limits=config.tool_call_limits,
+        tool_budget=config.tool_budget,
         retry_policy=config.retry_policy,
         request_timeout_seconds=config.request_timeout_seconds,
         text_observer=config.text_observer,

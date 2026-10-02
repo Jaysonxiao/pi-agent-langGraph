@@ -15,9 +15,9 @@ export default function ToolSettings({ available, selected, limits, toggle, setL
       onChange={event => toggle(name, event.target.checked)} />
       <span><b>{toolLabel(name)}</b><small>{descriptions[name]}</small></span>
     </label>
-    {['read', 'list', 'search'].includes(name) && <label className="limit-input">最多
-      <input aria-label={`${name} 最大调用次数`} type="number" min="0" max="20" value={limits[name] ?? 0}
+    <label className="limit-input">最多
+      <input aria-label={`${toolLabel(name)} 最大调用次数`} type="number" min="0" max="20" value={limits[name] ?? 20}
         onChange={event => setLimit(name, Math.max(0, Math.min(20, Number(event.target.value))))} />次
-    </label>}
+    </label>
   </div>)}</fieldset>;
 }

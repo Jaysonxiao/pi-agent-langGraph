@@ -7,11 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field
 TOOL_NAMES = ("read", "list", "search")
 CODING_TOOL_NAMES = ("write", "edit", "propose_command")
 ALL_TOOL_NAMES = TOOL_NAMES + CODING_TOOL_NAMES
-DEFAULT_TOOL_CALL_LIMITS = {name: 4 for name in TOOL_NAMES}
+DEFAULT_TOOL_CALL_LIMITS = {name: 20 for name in ALL_TOOL_NAMES}
 MAX_TOOL_CALLS_PER_TOOL = 20
 ToolName = Literal["read", "list", "search", "write", "edit", "propose_command"]
 ToolCallLimits = dict[
-    Literal["read", "list", "search"], Annotated[int, Field(ge=0, le=MAX_TOOL_CALLS_PER_TOOL)]
+    ToolName, Annotated[int, Field(ge=0, le=MAX_TOOL_CALLS_PER_TOOL, strict=True)]
 ]
 
 
@@ -54,6 +54,7 @@ class SettingsUpdate(InputModel):
 
 class StepDetail(BaseModel):
     event_id: int
+    checkpoint_id: str
     title: str
     node: str
     input: list[dict[str, Any]]
@@ -62,10 +63,28 @@ class StepDetail(BaseModel):
     snapshot_after: dict[str, Any]
 
 
+class TokenTotals(BaseModel):
+    input_tokens: int | None = 0
+    output_tokens: int | None = 0
+    total_tokens: int | None = 0
+    recorded_calls: int = 0
+    unknown_calls: int = 0
+    pending_calls: int = 0
+
+
+class UsageView(BaseModel):
+    server_epoch: str
+    revision: int
+    session_id: str | None
+    overall: TokenTotals
+    session: TokenTotals
+
+
 class SessionItem(BaseModel):
     session_id: str
     title: str
     workspace: str
+    workspace_known: bool = True
     archived: bool
     created_at: str
     updated_at: str
@@ -93,6 +112,8 @@ class Activity(BaseModel):
     phase: str
     tool_name: str | None = None
     outcome: str | None = None
+    checkpoint_id: str | None = None
+    tool_call_id: str | None = None
     created_at: str
 
 
@@ -102,6 +123,7 @@ class MessageItem(BaseModel):
     text: str
     tool_name: str | None = None
     truncated: bool = False
+    proposals: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class MessagePage(BaseModel):

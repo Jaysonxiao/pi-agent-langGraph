@@ -45,7 +45,9 @@ def test_managed_start_pause_stop_restart(tmp_path: Path) -> None:
             initial = lifecycle.read_instance(database)
             assert initial is not None
             assert lifecycle.request_control({**initial, "token": "wrong"}) is False
-            assert "token" not in json.dumps(lifecycle.status(database))
+            public_status = lifecycle.status(database)
+            assert "token" not in public_status
+            assert initial["token"] not in json.dumps(public_status)
             if sys.platform != "win32":
                 os.kill(child.pid, signal.SIGSTOP)
                 deadline = time.monotonic() + 3

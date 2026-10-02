@@ -89,6 +89,12 @@ class WebStore:
                     (json.dumps(tools),),
                 )
             run_columns = {row["name"] for row in db.execute("PRAGMA table_info(web_runs)")}
+            activity_columns = {
+                row["name"] for row in db.execute("PRAGMA table_info(web_activity)")
+            }
+            for column in ("checkpoint_id", "tool_call_id"):
+                if column not in activity_columns:
+                    db.execute(f"ALTER TABLE web_activity ADD COLUMN {column} TEXT")
             if "operation" not in run_columns:
                 db.execute(
                     "ALTER TABLE web_runs ADD COLUMN operation TEXT NOT NULL DEFAULT 'prompt'"
@@ -122,8 +128,15 @@ class WebStore:
             return None
         tools = json.loads(row["tools_json"])
         tool_limits = json.loads(row["tool_limits_json"])
-        if not tool_limits:
-            tool_limits = DEFAULT_TOOL_CALL_LIMITS.copy()
+        if set(tool_limits).issubset(DEFAULT_TOOL_CALL_LIMITS):
+            merged = {**DEFAULT_TOOL_CALL_LIMITS, **tool_limits}
+            if merged != tool_limits:
+                with self.connect() as db:
+                    db.execute(
+                        "UPDATE web_settings SET tool_limits_json=? WHERE settings_id=1",
+                        (json.dumps(merged),),
+                    )
+            tool_limits = merged
         return row["workspace"], tuple(tools), tool_limits
 
     def save_settings(
@@ -145,6 +158,7 @@ class WebStore:
             rows = db.execute(
                 "SELECT s.session_id, COALESCE(w.title, '历史会话') AS title, "
                 "COALESCE(w.archived, 0) AS archived, "
+                "CASE WHEN NULLIF(w.workspace, '') IS NULL THEN 0 ELSE 1 END AS workspace_known, "
                 "COALESCE(NULLIF(w.workspace, ''), ?) AS workspace, s.created_at, s.updated_at "
                 "FROM pi_agent_sessions s LEFT JOIN web_sessions w "
                 "ON s.session_id=w.session_id WHERE COALESCE(w.archived, 0)=? "
@@ -158,6 +172,7 @@ class WebStore:
             row = db.execute(
                 "SELECT s.session_id, COALESCE(w.title, '历史会话') AS title, "
                 "COALESCE(w.archived, 0) AS archived, "
+                "CASE WHEN NULLIF(w.workspace, '') IS NULL THEN 0 ELSE 1 END AS workspace_known, "
                 "COALESCE(NULLIF(w.workspace, ''), ?) AS workspace, s.created_at, s.updated_at "
                 "FROM pi_agent_sessions s LEFT JOIN web_sessions w "
                 "ON s.session_id=w.session_id WHERE s.session_id=?",
@@ -181,8 +196,8 @@ class WebStore:
         with self.connect() as db:
             db.execute(
                 "INSERT OR IGNORE INTO web_sessions(session_id,title,archived,workspace) "
-                "VALUES (?, '历史会话', 0, ?)",
-                (session_id, str(self.default_workspace)),
+                "VALUES (?, '历史会话', 0, '')",
+                (session_id,),
             )
             if edit.title is not None:
                 db.execute(
@@ -292,12 +307,15 @@ class WebStore:
         phase: str,
         tool_name: str | None = None,
         outcome: str | None = None,
+        *,
+        checkpoint_id: str | None = None,
+        tool_call_id: str | None = None,
     ) -> None:
         with self.connect() as db:
             db.execute(
-                "INSERT INTO web_activity(session_id,run_id,phase,tool_name,outcome,created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, run_id, phase, tool_name, outcome, now()),
+                "INSERT INTO web_activity(session_id,run_id,phase,tool_name,outcome,created_at,"
+                "checkpoint_id,tool_call_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (session_id, run_id, phase, tool_name, outcome, now(), checkpoint_id, tool_call_id),
             )
             db.execute(
                 "DELETE FROM web_activity WHERE session_id=? AND event_id NOT IN "

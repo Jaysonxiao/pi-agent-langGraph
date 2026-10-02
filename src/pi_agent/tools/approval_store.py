@@ -57,16 +57,23 @@ class ApprovalStore(CommandApprovalStore):
             json.loads(row[10]) if row[10] else None,
         )
 
-    def proposals(self, session_id: str) -> list[DurableProposal]:
+    def proposals(
+        self, session_id: str, *, message_ids: tuple[str, ...] | None = None
+    ) -> list[DurableProposal]:
+        if message_ids == ():
+            return []
+        query = (
+            "SELECT proposal_id FROM command_proposals WHERE session_id=? "
+            "AND payload_json IS NOT NULL"
+        )
+        parameters: tuple[str, ...] = (session_id,)
+        if message_ids is None:
+            query += " ORDER BY rowid DESC LIMIT 50"
+        else:
+            query += f" AND message_id IN ({','.join('?' for _ in message_ids)}) ORDER BY rowid"
+            parameters += message_ids
         with self._connect() as db:
-            ids = [
-                row[0]
-                for row in db.execute(
-                    "SELECT proposal_id FROM command_proposals WHERE session_id=? "
-                    "AND payload_json IS NOT NULL ORDER BY rowid DESC LIMIT 50",
-                    (session_id,),
-                )
-            ]
+            ids = [row[0] for row in db.execute(query, parameters)]
         return [proposal for pid in ids if (proposal := self.proposal(pid)) is not None]
 
     def prepare(

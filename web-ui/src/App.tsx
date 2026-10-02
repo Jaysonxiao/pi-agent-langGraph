@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Activity as ActivityIcon, Archive, ArrowDown, ArrowRight, ArrowUp, Check, ChevronDown, CircleHelp, Code2, Copy, FileText, Folder, Loader2, Menu, MessageSquare, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, RotateCcw, Search, Settings, Square, Terminal, WifiOff, X } from 'lucide-react';
-import { api, ApiError, mergeActivities, mergePreview, statusLabels, toolLabel, type Activity, type Checkpoint, type Config, type Message, type Page, type Preview, type Proposal, type Run, type Session, type StepDetail, type View } from './api';
+import { api, ApiError, mergeActivities, mergePreview, statusLabels, toolLabel, type Activity, type Checkpoint, type Config, type Message, type Page, type Preview, type Proposal, type Run, type Session, type StepDetail, type View, type UsageView, mergeUsage } from './api';
 import ApprovalCard from './ApprovalCard';
 import ToolSettings from './ToolSettings';
+import TokenUsage from './TokenUsage';
+import NodeDetails from './NodeDetails';
+import WorkspaceSessions from './WorkspaceSessions';
+import { groupSessions } from './workspaces';
 
 const prompts = [
   { icon: MessageSquare, title: '梳理一个想法', detail: '拆开目标与约束', text: '我有一个想法：……请帮我梳理目标、约束和下一步。' },
@@ -37,15 +41,17 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 function phaseLabel(item: Activity): string {
+  if (item.outcome === 'cancelled' && item.phase === 'after_model') return '模型响应已取消';
+  if (item.outcome === 'cancelled' && item.phase === 'after_tool') return `${toolLabel(item.tool_name)} 已取消`;
+  if (item.outcome === 'failed' && item.phase === 'after_model') return '模型响应失败';
   const labels: Record<string, string> = { run_start: '任务开始', before_model: '正在生成回复', after_model: '模型响应完成', before_tool: `调用 ${toolLabel(item.tool_name)}`, after_tool: `${toolLabel(item.tool_name)} 返回结果`, run_end: item.outcome === 'completed' ? '任务完成' : item.outcome === 'cancelled' ? '任务已停止' : item.outcome === 'awaiting_approval' ? '等待人工审批' : '任务未完成' };
   return labels[item.phase] ?? item.phase;
 }
 
-function StepMessages({ label, messages }: { label: string; messages: StepDetail['input'] }) {
-  return <section className="step-messages"><h3>{label}</h3>{messages.length ? messages.map((message, index) => <article key={`${message.role}-${index}`}><small>{message.role === 'user' ? '用户输入' : message.role === 'tool' ? `工具 ${toolLabel(message.tool_name)} 输出` : '模型消息'}</small><pre>{message.text || (message.tool_calls?.length ? '' : '（无文本内容）')}</pre>{message.tool_calls?.map((call, callIndex) => <div className="call-block" key={`${call.name}-${callIndex}`}><b>{toolLabel(call.name)}</b><pre>{JSON.stringify(call.args, null, 2)}</pre></div>)}</article>) : <p className="muted">此节点没有可展示内容</p>}</section>;
-}
-
 export default function App() {
+  const [usage, setUsage] = useState<UsageView | null>(null);
+  const stepVersion = useRef(0);
+  const usageVersion = useRef(0);
   const [config, setConfig] = useState<Config | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selected, setSelected] = useState<string | null>(() => localStorage.getItem('pi.session'));
@@ -123,6 +129,23 @@ export default function App() {
   }, []);
 
   useEffect(() => { void bootstrap(); }, [bootstrap]);
+  useEffect(() => {
+    if (!config) return;
+    let alive = true;
+    const refresh = async () => {
+      const version = ++usageVersion.current;
+      try {
+        const result = await api<UsageView>(`/usage${selected ? `?session_id=${encodeURIComponent(selected)}` : ''}`);
+        if (alive && version === usageVersion.current) {
+          setUsage(current => mergeUsage(current, result));
+          if (result.server_epoch !== config.server_epoch) void bootstrap();
+        }
+      } catch { /* Existing connection UI reports failures; retry on the next poll. */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [selected, config?.server_epoch]);
   useEffect(() => { if (config) void loadSessions().catch(reason => setError(errorText(reason))); }, [config, loadSessions]);
   useEffect(() => {
     const media = window.matchMedia('(min-width: 721px)');
@@ -133,6 +156,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    stepVersion.current++; setStepLoading(false);
     setView(null); setOlder([]); setPage(null); setMenuOpen(false); setError(''); setConnected(false); setCancelling(false); setBranchOpen(false); setStepDetail(null); setStepError('');
     autoScroll.current = true;
     if (!selected || !config) { setLoading(false); return; }
@@ -159,6 +183,11 @@ export default function App() {
       if (!alive) return;
       const preview = JSON.parse((event as MessageEvent).data) as Preview;
       setView(current => current?.session.session_id === id && current.run?.run_id === preview.run_id && current.run.status === 'running' ? { ...current, preview: mergePreview(current.preview, preview) } : current);
+    });
+    stream.addEventListener('usage', event => {
+      if (!alive) return;
+      const incoming = JSON.parse((event as MessageEvent).data) as UsageView;
+      if (incoming.session_id === id) { usageVersion.current++; setUsage(current => mergeUsage(current, incoming)); }
     });
     stream.onerror = () => { if (alive) setConnected(false); };
     // Polling is a fallback for dropped terminal notifications and a restarted service.
@@ -324,13 +353,15 @@ export default function App() {
 
   async function openStep(eventId: number) {
     if (!selected) return;
+    const version = ++stepVersion.current;
     setStepLoading(true); setStepError(''); setStepDetail(null);
-    try { setStepDetail(await api<StepDetail>(`/sessions/${selected}/activities/${eventId}`)); }
-    catch (reason) { setStepError(errorText(reason)); }
-    finally { setStepLoading(false); }
+    try { const detail = await api<StepDetail>(`/sessions/${selected}/activities/${eventId}`); if (version === stepVersion.current) setStepDetail(detail); }
+    catch (reason) { if (version === stepVersion.current) setStepError(errorText(reason)); }
+    finally { if (version === stepVersion.current) setStepLoading(false); }
   }
 
-  const shown = sessions.filter(item => item.title.toLowerCase().includes(search.toLowerCase()));
+  const groups = groupSessions(sessions, search);
+  const shownCount = groups.reduce((count, group) => count + group.sessions.length, 0);
   const messageMap = new Map([...older, ...(view?.history.messages ?? [])].map(item => [item.message_id, item]));
   const messages = [...messageMap.values()];
   const preview = view?.preview;
@@ -346,12 +377,11 @@ export default function App() {
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <a className="brand" href="#" onClick={event => { event.preventDefault(); setSelected(null); }}><span className="brand-mark">π</span><span>Pi<span className="brand-sub">WORKBENCH</span></span></a>
       <button className="new-session" onClick={() => void newSession()} disabled={!config}><Plus size={17} />新建会话<span>＋</span></button>
-      <label className="search"><Search size={15} /><input aria-label="搜索会话" placeholder="搜索会话" value={search} onChange={event => setSearch(event.target.value)} /><kbd>⌕</kbd></label>
-      <div className="section-label"><span>{archived ? '已归档' : '最近会话'}</span><span>{shown.length}</span></div>
+      <label className="search"><Search size={15} /><input aria-label="搜索会话" placeholder="搜索会话或工作区" value={search} onChange={event => setSearch(event.target.value)} /><kbd>⌕</kbd></label>
+      <div className="section-label"><span>{archived ? '已归档' : '最近会话'}</span><span>{shownCount}</span></div>
       <nav className="session-list" aria-label="会话列表">
-        {shown.map(item => <button key={item.session_id} className={`session-item ${selected === item.session_id ? 'active' : ''}`} onClick={() => { setSelected(item.session_id); setSidebarOpen(false); }}>
-          <MessageSquare size={15} /><span>{item.title}</span><i /></button>)}
-        {!shown.length && <p className="empty-list">{search ? '没有匹配的会话' : archived ? '还没有归档会话' : '你的任务会保存在这里'}</p>}
+        <WorkspaceSessions groups={groups} selected={selected} searching={Boolean(search.trim())} select={id => { setSelected(id); setSidebarOpen(false); }} />
+        {!shownCount && <p className="empty-list">{search ? '没有匹配的会话' : archived ? '还没有归档会话' : '你的任务会保存在这里'}</p>}
       </nav>
       <div className="sidebar-bottom">
         <button className={archived ? 'selected' : ''} onClick={() => { setArchived(value => !value); setSelected(null); }}><Archive size={16} />{archived ? '返回最近会话' : '已归档会话'}</button>
@@ -381,8 +411,10 @@ export default function App() {
           <div className="welcome-note"><span className="small-pi">π</span>{config?.provider === 'fake' ? '离线演示已就绪 · 可按需使用本地工具' : '由你选择工作区与可用工具 · 本机运行'}</div>
         </div> : <div className="message-list">
           {(page ?? view?.history)?.next_before != null && <button className="history-button" onClick={() => void moreHistory()}>加载更早的消息 <ArrowUp size={13} /></button>}
-          {messages.map(message => <MessageBubble key={message.message_id} message={message} />)}
-          {view?.proposals?.map(proposal => <ApprovalCard key={proposal.proposal_id} proposal={proposal} disabled={!!running || !!view.session.archived || !!approving} busy={approving === proposal.proposal_id} decide={(item, decision) => void decideProposal(item, decision)} />)}
+          {messages.map(message => <Fragment key={message.message_id}>
+            <MessageBubble message={message} />
+            {message.proposals?.map(proposal => <ApprovalCard key={proposal.proposal_id} proposal={proposal} disabled={!!running || !!view?.session.archived || !!approving} busy={approving === proposal.proposal_id} decide={(item, decision) => void decideProposal(item, decision)} />)}
+          </Fragment>)}
           {previewMessage && <div className="stream-preview" aria-label="正在生成的回复"><MessageBubble message={previewMessage} /><small className="muted">正在生成…</small></div>}
           {pending?.session === selected && !messages.some(item => item.role === 'user' && item.text === pending.text) && <div className="message user pending"><div className="message-meta"><span className="avatar user">你</span><b>你</b><span className="muted">等待确认</span></div><div className="message-body">{pending.text}</div></div>}
           {running && <div className="thinking"><span className="avatar assistant">π</span><div className="thinking-dots"><i /><i /><i /></div><span>{cancelling ? '正在停止并清理…' : currentActivities.length ? phaseLabel(currentActivities[currentActivities.length - 1]) : '正在准备任务…'}</span></div>}
@@ -400,6 +432,7 @@ export default function App() {
           <textarea ref={input} aria-label="输入消息" placeholder="给 Pi 一个任务，或问问这个项目…" value={draft} maxLength={32768} rows={2} disabled={!config || view?.needs_recovery || view?.awaiting_approval || sending || creating} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (!running) void send(); } }} />
           <div className="composer-toolbar"><div className="model-chip"><span className="model-symbol">✳</span>{config?.model ?? '连接模型中'}<span className="model-mode">{config?.provider === 'fake' ? 'DEMO' : 'API'}</span></div><div className="send-area"><small>{running ? '刷新页面不会中断运行' : 'Enter 发送 · Shift + Enter 换行'}</small>{running ? <button className="stop-button" aria-label="停止运行" onClick={() => void stop()} disabled={cancelling}>{cancelling ? <Loader2 size={16} className="spin" /> : <Square size={13} fill="currentColor" />}</button> : <button className="send-button" aria-label="发送消息" disabled={!draft.trim() || savingSettings || sending || creating || !config || !!view?.needs_recovery || !!view?.awaiting_approval} onClick={() => void send()}>{sending ? <Loader2 size={18} className="spin" /> : <ArrowUp size={19} />}</button>}</div></div>
         </div>}
+      <TokenUsage currentLoading={selected !== null && usage?.session_id !== selected} usage={usage?.session_id === selected ? usage : usage ? { ...usage, session: { input_tokens: 0, output_tokens: 0, total_tokens: 0, recorded_calls: 0, unknown_calls: 0, pending_calls: 0 } } : null} />
       <div className="composer-footer"><span><Folder size={12} />{(view?.session.workspace ?? config?.workspace)?.split(/[\\/]/).pop() ?? '本地工作区'}</span><span>Pi 的回答可能有误，请核对重要信息。</span></div>
       </div>
     </main>
@@ -410,17 +443,17 @@ export default function App() {
           onChange={event => void selectTool(tool, event.target.checked)} />{toolLabel(tool)}
       </label>)}{!config?.available_tools.length && <small>未启用工作区工具</small>}</div><small className="muted">选择从下一轮对话生效。</small></div>
       <div className="detail-section activity-section"><div className="section-label"><span>执行过程</span>{running && <span className="pulse-label">运行中</span>}</div>
-        {currentActivities.length ? <ol className="activity-list">{currentActivities.map((item, index) => { const inspectable = item.phase === 'after_model' || item.phase === 'after_tool'; return <li key={item.event_id} className={`${item.outcome === 'failed' ? 'failed' : ''} ${inspectable ? 'inspectable' : ''}`}><span className="timeline-dot">{running && index === currentActivities.length - 1 ? <Loader2 size={12} className="spin" /> : item.phase.includes('tool') ? <Terminal size={11} /> : <Check size={11} />}</span><div><button className="activity-node" disabled={!inspectable} onClick={() => void openStep(item.event_id)}>{phaseLabel(item)}{inspectable && <ArrowRight size={12} />}</button><time>{new Date(item.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</time></div></li>; })}</ol> : <div className="activity-empty"><div className="empty-route"><i /><span /><i /><span /><i /></div><b>每一步，都有迹可循</b><p>发送任务后，这里会显示<br />模型响应与工具执行过程。</p></div>}
+        {currentActivities.length ? <ol className="activity-list">{currentActivities.map((item, index) => { const inspectable = item.outcome !== 'cancelled' && (item.phase === 'after_model' || item.phase === 'after_tool'); return <li key={item.event_id} className={`${item.outcome === 'failed' ? 'failed' : ''} ${inspectable ? 'inspectable' : ''}`}><span className="timeline-dot">{running && index === currentActivities.length - 1 ? <Loader2 size={12} className="spin" /> : item.phase.includes('tool') ? <Terminal size={11} /> : <Check size={11} />}</span><div><button className="activity-node" disabled={!inspectable} onClick={() => void openStep(item.event_id)}>{phaseLabel(item)}{inspectable && <ArrowRight size={12} />}</button><time>{new Date(item.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</time></div></li>; })}</ol> : <div className="activity-empty"><div className="empty-route"><i /><span /><i /><span /><i /></div><b>每一步，都有迹可循</b><p>发送任务后，这里会显示<br />模型响应与工具执行过程。</p></div>}
       </div>
       <div className="detail-bottom"><span className="status-dot" /><div><b>会话自动保存</b><p>关闭页面后，仍可回来继续。</p></div></div>
     </aside>}
 
     {branchOpen && <div className="modal-backdrop" onClick={() => { if (!branchLoading) setBranchOpen(false); }}><section className="modal" role="dialog" aria-modal="true" aria-label="创建会话分支" onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭分支对话框" disabled={branchLoading} onClick={() => setBranchOpen(false)}><X size={18} /></button><form onSubmit={event => void createBranch(event)}><h2>从检查点创建分支</h2><p>复制已完成的对话到独立会话，保留原会话和工作区。</p><label>已完成的检查点<select aria-label="已完成的检查点" value={checkpointId} onChange={event => setCheckpointId(event.target.value)} disabled={branchLoading}>{checkpoints.map(item => <option key={item.checkpoint_id} value={item.checkpoint_id}>{new Date(item.created_at).toLocaleString()} · {item.preview}</option>)}</select></label>{!branchLoading && !checkpoints.length && <p>还没有已完成的检查点。可以先继续当前运行，或新建会话。</p>}{branchError && <div className="error-banner" role="alert">{branchError}</div>}<button className="primary-button" disabled={branchLoading || !checkpointId} type="submit">{branchLoading ? '正在处理…' : '创建分支'}</button></form></section></div>}
 
-    {(renaming || showHelp || settingsOpen) && <div className="modal-backdrop" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><section className={`modal ${settingsOpen ? 'settings-modal' : ''}`} role="dialog" aria-modal="true" aria-label={renaming ? '重命名会话' : settingsOpen ? '工作区与工具设置' : '使用说明'} onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭对话框" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><X size={18} /></button>{renaming ? <form onSubmit={event => { event.preventDefault(); if (titleDraft.trim()) void editSession({ title: titleDraft.trim() }); }}><h2>重命名会话</h2><label>会话名称<input autoFocus value={titleDraft} maxLength={100} onChange={event => setTitleDraft(event.target.value)} /></label><button className="primary-button" type="submit" disabled={!titleDraft.trim()}>保存名称</button></form> : settingsOpen ? <form onSubmit={event => void saveSettings(event)}><div className="eyebrow">PI WORKSPACE CONFIG</div><h2>工作区与工具</h2><label>本机目录<input autoFocus value={workspaceDraft} onChange={event => setWorkspaceDraft(event.target.value)} placeholder="例如 C:\\workspace\\my-project" /></label><p className="form-note">填写本机已存在的目录。新会话使用新工作区；已有会话保留创建时的工作区。工具选择从下一轮对话生效，取消勾选后模型不能调用该工具。只读工具的数值是每轮调用上限，0 表示不允许调用。</p><ToolSettings available={config?.available_tools ?? []} selected={toolsDraft} limits={toolLimitsDraft}
+    {(renaming || showHelp || settingsOpen) && <div className="modal-backdrop" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><section className={`modal ${settingsOpen ? 'settings-modal' : ''}`} role="dialog" aria-modal="true" aria-label={renaming ? '重命名会话' : settingsOpen ? '工作区与工具设置' : '使用说明'} onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭对话框" onClick={() => { setRenaming(false); setShowHelp(false); setSettingsOpen(false); }}><X size={18} /></button>{renaming ? <form onSubmit={event => { event.preventDefault(); if (titleDraft.trim()) void editSession({ title: titleDraft.trim() }); }}><h2>重命名会话</h2><label>会话名称<input autoFocus value={titleDraft} maxLength={100} onChange={event => setTitleDraft(event.target.value)} /></label><button className="primary-button" type="submit" disabled={!titleDraft.trim()}>保存名称</button></form> : settingsOpen ? <form onSubmit={event => void saveSettings(event)}><div className="eyebrow">PI WORKSPACE CONFIG</div><h2>工作区与工具</h2><label>本机目录<input autoFocus value={workspaceDraft} onChange={event => setWorkspaceDraft(event.target.value)} placeholder="例如 C:\\workspace\\my-project" /></label><p className="form-note">填写本机已存在的目录。新会话使用新工作区；已有会话保留创建时的工作区。工具选择从下一轮对话生效，取消勾选后模型不能调用该工具。所有工具的数值是每次用户请求的调用上限，默认各 20 次，0 表示不允许调用；审批继续和恢复沿用同一轮额度。</p><ToolSettings available={config?.available_tools ?? []} selected={toolsDraft} limits={toolLimitsDraft}
       toggle={(name, checked) => setToolsDraft(current => checked ? [...current, name] : current.filter(tool => tool !== name))}
       setLimit={(name, limit) => setToolLimitsDraft(current => ({ ...current, [name]: limit }))} />{settingsError && <div className="error-banner" role="alert">{settingsError}</div>}<button className="primary-button" type="submit" disabled={savingSettings || !workspaceDraft.trim()}>{savingSettings ? '正在保存…' : '保存设置'}</button></form> : <><div className="brand-mark">π</div><h2>你的本地 AI 工作空间。</h2><p>你可以聊天、写作、分析、规划，也可以让 Pi 按需查看当前工作区。</p><p>执行过程会在右侧呈现。工作区与工具可以在设置中更换，工具选择从下一轮生效。</p><p>会话保存在本机。使用真实模型时，服务密钥只在本机服务端配置。</p><button className="primary-button" onClick={() => setShowHelp(false)}>开始使用 <ArrowRight size={15} /></button></>}</section></div>}
 
-    {(stepLoading || stepError || stepDetail) && <div className="modal-backdrop" onClick={() => { setStepDetail(null); setStepError(''); }}><section className="modal step-modal" role="dialog" aria-modal="true" aria-label="执行节点详情" onClick={event => event.stopPropagation()}><button className="icon-button modal-close" aria-label="关闭节点详情" onClick={() => { setStepDetail(null); setStepError(''); }}><X size={18} /></button>{stepLoading ? <div className="loading-state"><Loader2 size={18} className="spin" />读取 checkpoint 展示快照…</div> : stepError ? <><h2>节点详情暂不可用</h2><p>{stepError}</p></> : stepDetail && <><div className="eyebrow">RUN NODE / {stepDetail.node.toUpperCase()}</div><h2>{stepDetail.title.replace('propose_command', 'command')}</h2><div className="step-grid"><StepMessages label="输入" messages={stepDetail.input} /><StepMessages label="输出" messages={stepDetail.output} /></div><div className="snapshot-grid"><details><summary>执行前快照</summary><pre>{JSON.stringify(stepDetail.snapshot_before, null, 2)}</pre></details><details><summary>执行后快照</summary><pre>{JSON.stringify(stepDetail.snapshot_after, null, 2)}</pre></details></div></>}</section></div>}
+    {(stepLoading || stepError || stepDetail) && <NodeDetails loading={stepLoading} error={stepError} detail={stepDetail} close={() => { stepVersion.current++; setStepLoading(false); setStepDetail(null); setStepError(''); }} />}
   </div>;
 }

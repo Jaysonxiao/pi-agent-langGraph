@@ -4,7 +4,7 @@
 
 本项目面向正在学习 Agent 工程的 Python 开发者：参考 Pi Agent 的设计，用 Python / LangGraph 实现可运行、可测试的模型—工具循环、会话、上下文和运行时。重点是理解 Pi 的设计意图与本项目的改造取舍，不追求逐项复制 Pi。Python 要求 `>=3.11,<3.14`；依赖和脚本以 `pyproject.toml` 为准。仓库采用 MIT 协议，见 `LICENSE`。
 
-M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立扩展，已于 2026-10-01 按已交付范围归档，见 `docs/acceptance/web-archive-2026-10-01.md`。同日整体复审覆盖工具设置调整及 CLI/TCP 基线兼容性，最新证据见 `docs/acceptance/web-cli-review-2026-10-01.md`。新环境 Windows/Linux 和真实服务部署验证仍有后置项，Web 未关闭项见 `docs/follow-ups/web.md`，不能将归档等同于生产就绪。`PLAN.md` 是当前状态、范围和验收门槛的权威记录；`docs/acceptance/` 保存实际证据和未关闭项。`README.md` 是运行入口，`docs/README.md` 是文档索引，`LEARNING_LOG.md` 记录学习与决策。`docs/history/` 只作历史追溯。实现、验收、归档和复验日期分别记录。
+M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立扩展，已于 2026-10-01 按已交付范围归档，见 `docs/acceptance/web-archive-2026-10-01.md`。同日整体复审覆盖工具设置调整及 CLI/TCP 基线兼容性，归档证据见 `docs/acceptance/web-cli-review-2026-10-01.md`。2026-10-02 归档后修复审批卡片位置，并增加会话工作区分组及六项工具持久额度，独立证据见 `docs/acceptance/web-approval-history-2026-10-02.md` 、`docs/acceptance/web-workspace-budgets-2026-10-02.md` 和 `docs/acceptance/web-node-checkpoints-2026-10-02.md`（审批继续及多工具节点详情修复）。同日增加持久 Token 统计与节点弹窗优化，见 `docs/acceptance/web-token-usage-2026-10-02.md`；模型 usage 缺失明确标记，复制分支历史不重复累计。新环境 Windows/Linux 和真实服务部署验证仍有后置项，Web 未关闭项见 `docs/follow-ups/web.md`，不能将归档等同于生产就绪。`PLAN.md` 是当前状态、范围和验收门槛的权威记录；`docs/acceptance/` 保存实际证据和未关闭项。`README.md` 是运行入口，`docs/README.md` 是文档索引，`LEARNING_LOG.md` 记录学习与决策。`docs/history/` 只作历史追溯。实现、验收、归档和复验日期分别记录。
 
 ## 一条请求如何运行
 
@@ -12,7 +12,7 @@ M0–M11 均已按**各自交付范围**归档；本机 Web 工作台是独立�
 
 - `pi-agent --provider fake`：默认离线、确定性的**最小图**，不代表真实工具对话。
 - `pi-agent --provider compatible`：显式启用持久化异步模型/工具链；只读 `read`、`list`、`search` 受工作区限制。命令执行须先形成持久化提案，再由交互终端审批；没有直接文件写入入口。
-- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实工具；compatible 使用服务端模型配置。Web 提供会话、设置、流式文本、节点详情、中断恢复与完成 checkpoint 分支，以及服务 status/stop/restart。六项工具默认选中，页面取消选择从下一轮生效。write/edit/command 默认人工审批，`--no-require-approval` 可关闭新操作审批；默认命令程序为系统 shell，自定义 allowlist 可替换。操作仍持久认领，结果不确定时不自动重放；旧待审批提案不随新参数自动批准。
+- `pi-agent-web`：FastAPI + React 本机单用户工作台。默认 fake 演示会调用真实工具；compatible 使用服务端模型配置。Web 提供会话、设置、流式文本、节点详情、中断恢复与完成 checkpoint 分支，以及服务 status/stop/restart。六项工具默认选中，页面取消选择从下一轮生效；每次用户请求各项调用上限为 0–20，新设置默认各 20，旧数值保留；审批继续/恢复共享 SQLite 持久额度，操作重入不重复扣除，失败与拒绝占用次数。侧栏按会话保存的工作区分组。write/edit/command 默认人工审批，`--no-require-approval` 可关闭新操作审批；默认命令程序为系统 shell，自定义 allowlist 可替换。操作仍持久认领，结果不确定时不自动重放；旧待审批提案不随新参数自动批准。
 - `pi-agent-server` / `pi-agent-client`：共享令牌认证的 loopback TCP 会话入口，服务端持有工作区、模型与数据库；不作为公网服务部署。
 
 Web 工作区指令使用 `PI-AGENTS.md`，**不加载根目录这个 Codex 用的 `AGENTS.md`**；CLI/TCP 的上下文管线仍使用工作区 `AGENTS.md`。见 `docs/pi-agents.md`。
